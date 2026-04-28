@@ -25,6 +25,48 @@ input[type=range]{accent-color:#8B7355}
 }
 .print-only{display:none}
 .print-page-break{page-break-before:always}
+.day-shell{flex:1;overflow-y:auto;padding:22px;background:#FAF6F0}
+.day-inner{max-width:1180px;margin:0 auto}
+.day-hero{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:18px;flex-wrap:wrap}
+.day-title{font-family:'Cormorant Garamond',serif;font-size:30px;font-weight:300;color:#5A4A3A}
+.day-actions{display:flex;gap:8px;flex-wrap:wrap}
+.day-stats{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.day-grid{display:grid;grid-template-columns:minmax(280px,1.05fr) minmax(300px,1fr);gap:14px;align-items:start}
+.day-stack{display:grid;gap:14px}
+.day-section{background:#FFFCF7;border:1px solid #E8DDD0;border-radius:8px;padding:16px}
+.day-table-list{display:grid;gap:8px;max-height:520px;overflow-y:auto;padding-right:4px}
+.app-shell{width:100%;height:100vh;display:flex;flex-direction:column;background:#FAF6F0;font-family:'Outfit',sans-serif;color:#3A2E22;overflow:hidden}
+.app-header{padding:12px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #E8DDD0;background:#FFFCF7;flex-shrink:0;flex-wrap:wrap;gap:8px}
+.app-tabs{display:flex;gap:3px;background:#F0E8DC;border-radius:8px;padding:3px}
+.app-actions{display:flex;gap:14px;font-size:11px;color:#8A7A6A;align-items:center}
+@media (max-width: 820px){
+  html,body,#root{overflow:auto}
+  .app-shell{height:auto;min-height:100vh;overflow:visible}
+  .app-header{padding:10px 12px;align-items:flex-start}
+  .app-tabs{order:3;width:100%;overflow-x:auto}
+  .app-tabs button{white-space:nowrap;flex:0 0 auto}
+  .app-actions{width:100%;gap:6px;overflow-x:auto;padding-bottom:2px}
+  .app-actions span{white-space:nowrap}
+  .app-actions button{white-space:nowrap}
+  .day-shell{padding:14px;height:auto;min-height:100vh}
+  .day-title{font-size:25px}
+  .day-actions{width:100%}
+  .day-actions button{flex:1;min-width:140px}
+  .day-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .day-grid{grid-template-columns:1fr}
+  .day-table-list{max-height:none;overflow:visible;padding-right:0}
+}
+@media (max-width: 480px){
+  .app-header h1{font-size:20px!important}
+  .app-actions{font-size:10px}
+  .app-actions button{padding:4px 8px!important}
+  .day-shell{padding:10px}
+  .day-hero{gap:10px}
+  .day-title{font-size:22px}
+  .day-stats{grid-template-columns:1fr}
+  .day-section{padding:12px}
+  .day-actions button{width:100%;min-width:0}
+}
 </style>
 </head>
 <body>
@@ -3689,20 +3731,20 @@ function App() {
   const gridSize=30*zoom, gx=panX%gridSize, gy=panY%gridSize;
 
   return (
-    <div style={{width:"100%",height:"100vh",display:"flex",flexDirection:"column",background:"#FAF6F0",fontFamily:"'Outfit',sans-serif",color:"#3A2E22",overflow:"hidden"}}>
+    <div className="app-shell">
 
       {/* Header */}
-      <div style={{padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #E8DDD0",background:"#FFFCF7",flexShrink:0,flexWrap:"wrap",gap:8}}>
+      <div className="app-header">
         <div style={{display:"flex",alignItems:"baseline",gap:10}}>
           <h1 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:300,margin:0,letterSpacing:1,color:"#5A4A3A"}}>Château des Grotteaux</h1>
           <span style={{fontSize:11,color:"#A09080",fontWeight:300,letterSpacing:2,textTransform:"uppercase"}}>Mariage</span>
         </div>
-        <div style={{display:"flex",gap:3,background:"#F0E8DC",borderRadius:8,padding:3}}>
+        <div className="app-tabs">
           {[{k:"jourj",l:"Jour J"},{k:"seating",l:"Plan de table"},{k:"plan",l:"Plan du lieu"},{k:"guests",l:"Invités"},{k:"prestas",l:"Prestataires"},{k:"print",l:"Imprimer"}].map(t=>(
             <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 16px",border:"none",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:tab===t.k?500:400,fontFamily:"'Outfit',sans-serif",background:tab===t.k?"#FFFCF7":"transparent",color:tab===t.k?"#5A4A3A":"#A09080",boxShadow:tab===t.k?"0 1px 4px rgba(0,0,0,0.08)":"none",transition:"all 0.2s"}}>{t.l}</button>
           ))}
         </div>
-        <div style={{display:"flex",gap:14,fontSize:11,color:"#8A7A6A",alignItems:"center"}}>
+        <div className="app-actions">
           <span>{guests.length} invités</span><span>{allTables.length} tables</span><span>{totalSeats} places</span>
           <span style={{color:unassignedGuests.length>0?"#C07050":"#6B8E6B",fontWeight:500}}>{unassignedGuests.length} non placé{unassignedGuests.length!==1?"s":""}</span>
           <button onClick={()=>{if(editLocked){if(confirm("Déverrouiller l'édition ? Les modifications seront sauvegardées automatiquement."))setEditLocked(false);}else setEditLocked(true);}} style={{border:`1px solid ${editLocked?"#D7A66A":"#8BAA78"}`,background:editLocked?"#FFF5E6":"#EEF8EA",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:editLocked?"#9A6A30":"#4F7A45",fontFamily:"'Outfit',sans-serif",fontWeight:600}}>{editLocked?"Edition verrouillée":"Edition ouverte"}</button>
@@ -3752,20 +3794,20 @@ function App() {
       )}
 
       {tab==="jourj"&&(
-        <div style={{flex:1,overflowY:"auto",padding:22,background:"#FAF6F0"}}>
-          <div style={{maxWidth:1180,margin:"0 auto"}}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,marginBottom:18,flexWrap:"wrap"}}>
+        <div className="day-shell">
+          <div className="day-inner">
+            <div className="day-hero">
               <div>
-                <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,fontWeight:300,color:"#5A4A3A"}}>Tableau de bord Jour J</div>
+                <div className="day-title">Tableau de bord Jour J</div>
                 <div style={{fontSize:12,color:"#8A7A6A",marginTop:3}}>Lecture rapide, recherche invités, tables, prestataires et planning opérationnel.</div>
               </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <div className="day-actions">
                 <button onClick={()=>setTab("seating")} style={{padding:"9px 14px",borderRadius:8,border:"1px solid #D4C5B0",background:"#FFFCF7",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:12,color:"#5A4A3A"}}>Voir le plan</button>
                 <button onClick={()=>setTab("print")} style={{padding:"9px 14px",borderRadius:8,border:"none",background:"#8B7355",color:"#FFFCF7",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:12,fontWeight:500}}>Imprimer / PDF</button>
               </div>
             </div>
 
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(150px,1fr))",gap:10,marginBottom:14}}>
+            <div className="day-stats">
               {[
                 {label:"Invités",value:guests.length,color:"#4C78A8"},
                 {label:"Placés",value:assignedSet.size,color:"#54A24B"},
@@ -3783,9 +3825,9 @@ function App() {
               </div>
             )}
 
-            <div style={{display:"grid",gridTemplateColumns:"minmax(280px,1.05fr) minmax(300px,1fr)",gap:14,alignItems:"start"}}>
-              <div style={{display:"grid",gap:14}}>
-                <section style={{background:"#FFFCF7",border:"1px solid #E8DDD0",borderRadius:8,padding:16}}>
+            <div className="day-grid">
+              <div className="day-stack">
+                <section className="day-section">
                   <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A",marginBottom:10}}>Recherche invité</div>
                   <input value={daySearch} onChange={e=>setDaySearch(e.target.value)} placeholder="Taper un prénom ou un nom..." style={{width:"100%",padding:"12px 14px",borderRadius:8,border:"1px solid #D4C5B0",background:"#FAF6F0",fontFamily:"'Outfit',sans-serif",fontSize:15,outline:"none",marginBottom:10}}/>
                   {daySearch.trim()&&!dayGuestResults.length&&<div style={{fontSize:12,color:"#B0A090",fontStyle:"italic"}}>Aucun invité trouvé.</div>}
@@ -3801,7 +3843,7 @@ function App() {
                   );})}
                 </section>
 
-                <section style={{background:"#FFFCF7",border:"1px solid #E8DDD0",borderRadius:8,padding:16}}>
+                <section className="day-section">
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A"}}>Planning prestataires</div>
                     <button onClick={()=>setTab("prestas")} style={{border:"none",background:"transparent",color:"#8B7355",fontSize:11,cursor:"pointer"}}>Modifier</button>
@@ -3819,8 +3861,8 @@ function App() {
                 </section>
               </div>
 
-              <div style={{display:"grid",gap:14}}>
-                <section style={{background:"#FFFCF7",border:"1px solid #E8DDD0",borderRadius:8,padding:16}}>
+              <div className="day-stack">
+                <section className="day-section">
                   <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A",marginBottom:10}}>Prestataires du jour</div>
                   <div style={{display:"grid",gap:8}}>
                     {prestataires.slice(0,10).map(p=>{const cat=PRESTA_CATEGORIES.find(c=>c.key===p.category);const status=p.dayStatus||"attendu";return(
@@ -3841,9 +3883,9 @@ function App() {
                   </div>
                 </section>
 
-                <section style={{background:"#FFFCF7",border:"1px solid #E8DDD0",borderRadius:8,padding:16}}>
+                <section className="day-section">
                   <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A",marginBottom:10}}>Vue par table</div>
-                  <div style={{display:"grid",gap:8,maxHeight:520,overflowY:"auto",paddingRight:4}}>
+                  <div className="day-table-list">
                     {dayTableCards.map(({table,zone,guests:gs,capacity})=>(
                       <div key={table.id} style={{border:"1px solid #F0E8DC",borderRadius:8,padding:10,background:"#FAF6F0"}}>
                         <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center",marginBottom:6}}>
