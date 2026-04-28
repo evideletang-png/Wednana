@@ -2772,6 +2772,47 @@ function App() {
     a.remove();
     URL.revokeObjectURL(url);
   };
+  const exportLandscapeSeatingPdf = () => {
+    if(!curTables.length){alert("Aucune table dans cette zone.");return;}
+    const esc = v => String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+    const zone = zones.find(z=>z.id===activeZone);
+    const items=[
+      ...curVenue.map(e=>({x:e.x,y:e.y,w:e.w||80,h:e.h||40})),
+      ...curTables.flatMap(t=>{
+        const bodyW=t.shape==="round"?(t.radius||45)*2:t.shape==="u"?getUEffectiveUWidth(t):t.width||140;
+        const bodyH=t.shape==="round"?(t.radius||45)*2:t.shape==="u"?(t.uHeight||220):t.height||60;
+        return [{x:t.x,y:t.y,w:bodyW+90,h:bodyH+90},...getChairs(t).map(ch=>({x:ch.x,y:ch.y,w:42,h:42}))];
+      })
+    ];
+    let x1=Infinity,y1=Infinity,x2=-Infinity,y2=-Infinity;
+    items.forEach(e=>{x1=Math.min(x1,e.x-e.w/2);y1=Math.min(y1,e.y-e.h/2);x2=Math.max(x2,e.x+e.w/2);y2=Math.max(y2,e.y+e.h/2);});
+    const pad=80;
+    x1-=pad;y1-=pad;x2+=pad;y2+=pad;
+    const w=Math.max(900,x2-x1),h=Math.max(580,y2-y1);
+    const venueSvg=curVenue.map(e=>`<g transform="rotate(${+(e.rotation||0)} ${+e.x} ${+e.y})"><rect x="${e.x-(e.w||80)/2}" y="${e.y-(e.h||40)/2}" width="${e.w||80}" height="${e.h||40}" rx="8" fill="${esc(e.color||"#E8DDD0")}" opacity="0.42" stroke="#D4C5B0"/><text x="${e.x}" y="${e.y}" text-anchor="middle" dominant-baseline="middle" font-size="18" fill="#5A4A3A">${esc(e.label||"")}</text></g>`).join("");
+    const tableSvg=curTables.map(t=>{
+      const color=TABLE_COLORS[t.colorIdx%TABLE_COLORS.length];
+      const chairs=getChairs(t);
+      const body=t.shape==="round"
+        ? `<circle cx="${t.x}" cy="${t.y}" r="${t.radius||45}" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="4"/>`
+        : t.shape==="u"
+          ? (()=>{const tw=getUEffectiveUWidth(t),th=Math.max(120,t.uHeight||220),tk=Math.min(Math.max(28,t.thickness||58),Math.min(tw,th)-24);const x0=t.x-tw/2,y0=t.y-th/2,x3=t.x+tw/2,y3=t.y+th/2;return `<path d="M ${x0} ${y0} L ${x3} ${y0} L ${x3} ${y3} L ${x3-tk} ${y3} L ${x3-tk} ${y0+tk} L ${x0+tk} ${y0+tk} L ${x0+tk} ${y3} L ${x0} ${y3} Z" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="4"/>`;})()
+          : `<rect x="${t.x-(t.width||140)/2}" y="${t.y-(t.height||60)/2}" width="${t.width||140}" height="${t.height||60}" rx="8" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="4"/>`;
+      const chairSvg=chairs.map((ch,i)=>{
+        const g=assignments[t.id+"-"+i]||"";
+        const parts=g.split(" ");
+        const label=parts.length>1?`${parts[0]} ${parts[1]?.[0]||""}.`:g;
+        return `<g><circle cx="${ch.x}" cy="${ch.y}" r="20" fill="${g?color+"33":"#FFFCF7"}" stroke="${g?color:"#C2B199"}" stroke-width="2"/><text x="${ch.x}" y="${ch.y+4}" text-anchor="middle" font-size="11" font-weight="600" fill="#3A2E22">${esc(label)}</text></g>`;
+      }).join("");
+      return `<g><g transform="rotate(${+(t.rotation||0)} ${+t.x} ${+t.y})">${body}<text x="${t.x}" y="${t.y+5}" text-anchor="middle" font-size="18" font-weight="700" fill="${color}">${esc(t.name)}</text></g>${chairSvg}</g>`;
+    }).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plan de table paysage</title><style>@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#3A2E22;background:white}.page{padding:10mm}.top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6mm}.title{font-size:22px;font-weight:700}.meta{font-size:12px;color:#7A6A5A;text-align:right}.map{width:100%;height:176mm;border:1px solid #D4C5B0;border-radius:8px;background:#FAF6F0}svg text{font-family:Arial,sans-serif}@media screen{body{background:#eee}.page{max-width:1200px;margin:0 auto;background:white;min-height:100vh}.printHint{display:block}}@media print{.printHint{display:none}}</style></head><body><div class="page"><div class="top"><div><div class="title">Plan de table - ${esc(zone?.name||"Zone active")}</div><div style="font-size:12px;color:#7A6A5A">${curTables.length} tables · ${curTables.reduce((n,t)=>n+tableGuests(t).length,0)} invités placés · ${new Date().toLocaleString("fr-FR")}</div></div><div class="meta">Château des Grotteaux<br/>Format paysage A4</div></div><svg class="map" viewBox="${x1} ${y1} ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${venueSvg}${tableSvg}</svg><p class="printHint" style="font-size:13px;color:#7A6A5A">Utilisez Partager / Imprimer puis Enregistrer en PDF sur le téléphone.</p></div><script>setTimeout(()=>window.print(),450);<\/script></body></html>`;
+    const win = window.open("","_blank");
+    if(!win){alert("Ouverture bloquée. Autorise les popups pour générer le PDF paysage.");return;}
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  };
   const onImportClick = ()=>importInputRef.current?.click();
   const onImportFile = async e => {
     const file = e.target.files?.[0];
@@ -3752,6 +3793,7 @@ function App() {
           <button onClick={()=>redo()} disabled={!futureRef.current.length} style={{border:"1px solid #E8DDD0",background:futureRef.current.length?"#FFFCF7":"#F6F1EA",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:futureRef.current.length?"pointer":"not-allowed",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Redo</button>
           <button onClick={()=>createCheckpoint("Checkpoint manuel")} style={{border:"1px solid #E8DDD0",background:"#FFFCF7",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Checkpoint</button>
           <button onClick={downloadAuditLog} style={{border:"1px solid #E8DDD0",background:"#FFFCF7",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Audit JSONL</button>
+          {(tab==="seating"||tab==="jourj")&&<button onClick={exportLandscapeSeatingPdf} style={{border:"1px solid #D4C5B0",background:"#FFFCF7",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:"#5A4A3A",fontFamily:"'Outfit',sans-serif",fontWeight:600}}>PDF paysage</button>}
           <button onClick={exportProject} style={{border:"1px solid #E8DDD0",background:"#FFFCF7",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Exporter projet</button>
           <button onClick={onImportClick} style={{border:"1px solid #E8DDD0",background:"#FFFCF7",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Importer projet</button>
           <input ref={importInputRef} type="file" accept=".json,application/json" onChange={onImportFile} style={{display:"none"}}/>
@@ -3803,6 +3845,7 @@ function App() {
               </div>
               <div className="day-actions">
                 <button onClick={()=>setTab("seating")} style={{padding:"9px 14px",borderRadius:8,border:"1px solid #D4C5B0",background:"#FFFCF7",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:12,color:"#5A4A3A"}}>Voir le plan</button>
+                <button onClick={exportLandscapeSeatingPdf} style={{padding:"9px 14px",borderRadius:8,border:"1px solid #D4C5B0",background:"#FFFCF7",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:12,color:"#5A4A3A",fontWeight:500}}>PDF paysage</button>
                 <button onClick={()=>setTab("print")} style={{padding:"9px 14px",borderRadius:8,border:"none",background:"#8B7355",color:"#FFFCF7",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:12,fontWeight:500}}>Imprimer / PDF</button>
               </div>
             </div>
