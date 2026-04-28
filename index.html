@@ -2386,7 +2386,9 @@ const zBtnS = {width:30,height:30,border:"none",background:"transparent",cursor:
 function App() {
   const initialRaw = pickInitialSnapshot();
   const s = migrateSnapshotData(initialRaw?.data ? initialRaw.data : initialRaw || {});
-  const [tab,setTab] = useState("plan");
+  const [tab,setTab] = useState("jourj");
+  const [editLocked,setEditLocked] = useState(true);
+  const [daySearch,setDaySearch] = useState("");
   const [guests,setGuests] = useState(s?.guests||INIT_GUESTS);
   const [guestEvents,setGuestEvents] = useState(s?.guestEvents||{});
   const [groups,setGroups] = useState(s?.groups||[]);
@@ -2543,8 +2545,9 @@ function App() {
   },[zoom,panX,panY]);
 
   /* ─ Guests ─ */
-  const addGuest=()=>{const n=newGuest.trim();if(n&&!guests.includes(n)){setGuests([...guests,n]);setNewGuest("");}};
+  const addGuest=()=>{if(!canEdit)return;const n=newGuest.trim();if(n&&!guests.includes(n)){setGuests([...guests,n]);setNewGuest("");}};
   const removeGuest=name=>{
+    if(!canEdit)return;
     setGuests(guests.filter(g=>g!==name));
     const a={...assignments};Object.keys(a).forEach(k=>{if(a[k]===name)delete a[k]});setAssignments(a);
     const ge={...guestEvents};delete ge[name];setGuestEvents(ge);
@@ -2569,6 +2572,7 @@ function App() {
   const normGuest = n => n.replace(/\s+/g," ").trim();
   const keyGuest = n => normGuest(n).toLowerCase();
   const addGuestsBulk=()=>{
+    if(!canEdit)return;
     const parts = bulkGuestInput.split(/[\n,;]+/);
     const existing = new Set(guests.map(keyGuest));
     const seenBatch = new Set();
@@ -3344,10 +3348,10 @@ function App() {
   };
 
   /* ─ Venue ─ */
-  const addVenueEl=item=>{const c=viewCenter();setVenueEls({...venueEls,[activeZone]:[...curVenue,{id:uid(),...item,x:c.x,y:c.y,rotation:0}]});};
+  const addVenueEl=item=>{if(!canEdit)return;const c=viewCenter();setVenueEls({...venueEls,[activeZone]:[...curVenue,{id:uid(),...item,x:c.x,y:c.y,rotation:0}]});};
   const updateVE=(id,u)=>setVenueEls({...venueEls,[activeZone]:curVenue.map(e=>e.id===id?{...e,...u}:e)});
-  const removeVE=id=>{setVenueEls({...venueEls,[activeZone]:curVenue.filter(e=>e.id!==id)});if(selEl===id)setSelEl(null);};
-  const dragVE=(id,x,y)=>setVenueEls({...venueEls,[activeZone]:curVenue.map(e=>e.id===id?{...e,x,y}:e)});
+  const removeVE=id=>{if(!canEdit)return;setVenueEls({...venueEls,[activeZone]:curVenue.filter(e=>e.id!==id)});if(selEl===id)setSelEl(null);};
+  const dragVE=(id,x,y)=>{if(!canEdit)return;setVenueEls({...venueEls,[activeZone]:curVenue.map(e=>e.id===id?{...e,x,y}:e)});};
 
   /* ─ Tables ─ */
   const buildRect = (name,x,y,width,height,colorIdx,sides,extra={})=>{
@@ -3382,13 +3386,13 @@ function App() {
     setSelTable(mods[2].id);
     setEditTable(mods[2].id);
   };
-  const addTbl=sh=>{const id=uid(),c=viewCenter(),ct=curTables;
+  const addTbl=sh=>{if(!canEdit)return;const id=uid(),c=viewCenter(),ct=curTables;
     if(sh==="u_mod"){addModularU();return;}
     const t=sh==="round"?{id,name:`Table ${ct.length+1}`,shape:"round",x:c.x,y:c.y,radius:50,seats:8,colorIdx:ct.length,rotation:0}
       :sh==="u"?{id,name:`Table ${ct.length+1}`,shape:"u",x:c.x,y:c.y,uWidth:260,uHeight:220,thickness:58,uTopShare:0.72,seats:18,colorIdx:ct.length,rotation:0}
       :autoSizeRectTable({id,name:`Table ${ct.length+1}`,shape:"rect",x:c.x,y:c.y,width:140,height:60,seats:8,colorIdx:ct.length,rotation:0,autoSize:true,seatLayout:{mode:"perimeter"}});
     setTables({...tables,[activeZone]:[...ct,t]});setSelTable(id);setEditTable(id);};
-  const removeTbl=id=>{setTables({...tables,[activeZone]:curTables.filter(t=>t.id!==id)});
+  const removeTbl=id=>{if(!canEdit)return;setTables({...tables,[activeZone]:curTables.filter(t=>t.id!==id)});
     setTableGroups(prev=>{
       const zoneGroups = (prev[activeZone]||[]).map(g=>({...g,tableIds:g.tableIds.filter(tid=>tid!==id)})).filter(g=>g.tableIds.length>=2);
       return {...prev,[activeZone]:zoneGroups};
@@ -3588,6 +3592,7 @@ function App() {
     return {...t,seats:manual.length,seatLayout:{...t.seatLayout,manual}};
   });
   const dragTbl=(id,x,y)=>{
+    if(!canEdit)return;
     const base = curTables.find(t=>t.id===id);
     if(!base){return;}
     const g = groupForTableId(id);
@@ -3597,10 +3602,11 @@ function App() {
     setTables({...tables,[activeZone]:curTables.map(t=>idSet.has(t.id)?{...t,x:t.x+dx,y:t.y+dy}:t)});
   };
   const dropG=(n,tid,si,mx,my)=>{
+    if(!canEdit)return;
     if(n==="__MOVE_CHAIR__"){moveManualChair(tid,si,mx,my);return;}
     const a={...assignments};Object.keys(a).forEach(k=>{if(a[k]===n)delete a[k]});a[tid+"-"+si]=n;setAssignments(a);
   };
-  const unassign=n=>{const a={...assignments};Object.keys(a).forEach(k=>{if(a[k]===n)delete a[k]});setAssignments(a);};
+  const unassign=n=>{if(!canEdit)return;const a={...assignments};Object.keys(a).forEach(k=>{if(a[k]===n)delete a[k]});setAssignments(a);};
 
   /* ─ Zones ─ */
   const addZone=()=>{const n=newZoneName.trim();if(!n)return;const id=uid();const cs=["#8B7355","#B8A070","#6B8E5B","#7B6B8E","#8E6B6B"];
@@ -3646,6 +3652,39 @@ function App() {
   const selectedTableSet = new Set(selectedTableIds);
   const selectedBelongingGroupIds = new Set((curTableGroups||[]).filter(g=>g.tableIds.some(id=>selectedTableSet.has(id))).map(g=>g.id));
   const selVE=curVenue.find(e=>e.id===selEl);
+  const canEdit = !editLocked;
+  const tableZoneMap = Object.fromEntries(Object.entries(tables||{}).flatMap(([zid,tbls])=>(tbls||[]).map(t=>[t.id,zid])));
+  const tableById = Object.fromEntries(allTables.map(t=>[t.id,t]));
+  const zoneById = Object.fromEntries((zones||[]).map(z=>[z.id,z]));
+  const tableGuests = t => Object.entries(assignments||{})
+    .filter(([k])=>k.startsWith(t.id+"-"))
+    .sort(([a],[b])=>+a.split("-").pop()-+b.split("-").pop())
+    .map(([k,g])=>({guest:g,seat:+k.split("-").pop()+1,events:EVENT_CATEGORIES.filter(ev=>guestEvents?.[g]?.[ev.key]).map(ev=>ev.label)}));
+  const findGuestSeat = g => {
+    const key = Object.keys(assignments||{}).find(k=>assignments[k]===g);
+    if(!key) return null;
+    const tableId = key.split("-")[0];
+    const table = tableById[tableId];
+    const zone = zoneById[tableZoneMap[tableId]];
+    return table ? {key,tableId,table,zone,seat:+key.split("-").pop()+1} : null;
+  };
+  const normalizeSearch = v => (v||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const dayQuery = normalizeSearch(daySearch.trim());
+  const dayGuestResults = dayQuery ? sortedGuests.filter(g=>normalizeSearch(g).includes(dayQuery)).slice(0,12) : [];
+  const dayTableCards = allTables.map(t=>({table:t,zone:zoneById[tableZoneMap[t.id]],guests:tableGuests(t),capacity:getChairs(t).length})).sort((a,b)=>(a.zone?.name||"").localeCompare(b.zone?.name||"","fr",{sensitivity:"base"}) || (a.table.name||"").localeCompare(b.table.name||"","fr",{numeric:true,sensitivity:"base"}));
+  const dayTimeline = prestataires
+    .filter(p=>p.arrivalTime||p.setupTime||p.departureTime)
+    .flatMap(p=>[
+      p.arrivalTime&&{time:p.arrivalTime,label:"Arrivée",p},
+      p.setupTime&&{time:p.setupTime,label:"Installation",p},
+      p.departureTime&&{time:p.departureTime,label:"Départ",p},
+    ].filter(Boolean))
+    .sort((a,b)=>a.time.localeCompare(b.time));
+  const dayIssues = [
+    unassignedGuests.length ? `${unassignedGuests.length} invité(s) non placé(s)` : null,
+    totalSeats < guests.length ? `${guests.length-totalSeats} place(s) manquante(s)` : null,
+    allTables.filter(t=>tableGuests(t).length>getChairs(t).length).length ? "Table(s) surchargée(s)" : null,
+  ].filter(Boolean);
 
   const gridSize=30*zoom, gx=panX%gridSize, gy=panY%gridSize;
 
@@ -3659,13 +3698,14 @@ function App() {
           <span style={{fontSize:11,color:"#A09080",fontWeight:300,letterSpacing:2,textTransform:"uppercase"}}>Mariage</span>
         </div>
         <div style={{display:"flex",gap:3,background:"#F0E8DC",borderRadius:8,padding:3}}>
-          {[{k:"plan",l:"Plan du lieu"},{k:"seating",l:"Plan de table"},{k:"guests",l:"Invités"},{k:"prestas",l:"Prestataires"},{k:"print",l:"🖨 Imprimer"}].map(t=>(
+          {[{k:"jourj",l:"Jour J"},{k:"seating",l:"Plan de table"},{k:"plan",l:"Plan du lieu"},{k:"guests",l:"Invités"},{k:"prestas",l:"Prestataires"},{k:"print",l:"Imprimer"}].map(t=>(
             <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:"7px 16px",border:"none",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:tab===t.k?500:400,fontFamily:"'Outfit',sans-serif",background:tab===t.k?"#FFFCF7":"transparent",color:tab===t.k?"#5A4A3A":"#A09080",boxShadow:tab===t.k?"0 1px 4px rgba(0,0,0,0.08)":"none",transition:"all 0.2s"}}>{t.l}</button>
           ))}
         </div>
         <div style={{display:"flex",gap:14,fontSize:11,color:"#8A7A6A",alignItems:"center"}}>
           <span>{guests.length} invités</span><span>{allTables.length} tables</span><span>{totalSeats} places</span>
           <span style={{color:unassignedGuests.length>0?"#C07050":"#6B8E6B",fontWeight:500}}>{unassignedGuests.length} non placé{unassignedGuests.length!==1?"s":""}</span>
+          <button onClick={()=>{if(editLocked){if(confirm("Déverrouiller l'édition ? Les modifications seront sauvegardées automatiquement."))setEditLocked(false);}else setEditLocked(true);}} style={{border:`1px solid ${editLocked?"#D7A66A":"#8BAA78"}`,background:editLocked?"#FFF5E6":"#EEF8EA",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:editLocked?"#9A6A30":"#4F7A45",fontFamily:"'Outfit',sans-serif",fontWeight:600}}>{editLocked?"Edition verrouillée":"Edition ouverte"}</button>
           <button onClick={()=>undo()} disabled={!historyRef.current.length} style={{border:"1px solid #E8DDD0",background:historyRef.current.length?"#FFFCF7":"#F6F1EA",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:historyRef.current.length?"pointer":"not-allowed",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Undo</button>
           <button onClick={()=>redo()} disabled={!futureRef.current.length} style={{border:"1px solid #E8DDD0",background:futureRef.current.length?"#FFFCF7":"#F6F1EA",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:futureRef.current.length?"pointer":"not-allowed",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Redo</button>
           <button onClick={()=>createCheckpoint("Checkpoint manuel")} style={{border:"1px solid #E8DDD0",background:"#FFFCF7",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Checkpoint</button>
@@ -3684,7 +3724,7 @@ function App() {
       )}
 
       {/* Zone bar */}
-      {tab!=="guests"&&tab!=="prestas"&&tab!=="print"&&(
+      {tab!=="jourj"&&tab!=="guests"&&tab!=="prestas"&&tab!=="print"&&(
         <div style={{padding:"8px 20px",display:"flex",alignItems:"center",gap:6,borderBottom:"1px solid #F0E8DC",background:"#FDFAF5",flexShrink:0,overflowX:"auto"}}>
           <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.5,color:"#A09080",fontWeight:500,marginRight:6,whiteSpace:"nowrap"}}>Zones :</span>
           {zones.map(z=>(
@@ -3711,12 +3751,128 @@ function App() {
         </div>
       )}
 
+      {tab==="jourj"&&(
+        <div style={{flex:1,overflowY:"auto",padding:22,background:"#FAF6F0"}}>
+          <div style={{maxWidth:1180,margin:"0 auto"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:14,marginBottom:18,flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,fontWeight:300,color:"#5A4A3A"}}>Tableau de bord Jour J</div>
+                <div style={{fontSize:12,color:"#8A7A6A",marginTop:3}}>Lecture rapide, recherche invités, tables, prestataires et planning opérationnel.</div>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button onClick={()=>setTab("seating")} style={{padding:"9px 14px",borderRadius:8,border:"1px solid #D4C5B0",background:"#FFFCF7",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:12,color:"#5A4A3A"}}>Voir le plan</button>
+                <button onClick={()=>setTab("print")} style={{padding:"9px 14px",borderRadius:8,border:"none",background:"#8B7355",color:"#FFFCF7",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:12,fontWeight:500}}>Imprimer / PDF</button>
+              </div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,minmax(150px,1fr))",gap:10,marginBottom:14}}>
+              {[
+                {label:"Invités",value:guests.length,color:"#4C78A8"},
+                {label:"Placés",value:assignedSet.size,color:"#54A24B"},
+                {label:"Non placés",value:unassignedGuests.length,color:unassignedGuests.length?"#C07050":"#54A24B"},
+                {label:"Places libres",value:Math.max(0,totalSeats-assignedSet.size),color:"#8B7355"},
+              ].map(c=>(<div key={c.label} style={{background:"#FFFCF7",border:"1px solid #E8DDD0",borderRadius:8,padding:14}}>
+                <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:1.4,color:"#A09080",fontWeight:500}}>{c.label}</div>
+                <div style={{fontSize:28,fontWeight:600,color:c.color,marginTop:4}}>{c.value}</div>
+              </div>))}
+            </div>
+
+            {dayIssues.length>0&&(
+              <div style={{border:"1px solid #E0B0A0",background:"#FFF2EC",borderRadius:8,padding:"10px 12px",marginBottom:14,display:"flex",gap:12,flexWrap:"wrap",fontSize:12,color:"#9B553D"}}>
+                <strong>À vérifier</strong>{dayIssues.map((x,i)=><span key={i}>• {x}</span>)}
+              </div>
+            )}
+
+            <div style={{display:"grid",gridTemplateColumns:"minmax(280px,1.05fr) minmax(300px,1fr)",gap:14,alignItems:"start"}}>
+              <div style={{display:"grid",gap:14}}>
+                <section style={{background:"#FFFCF7",border:"1px solid #E8DDD0",borderRadius:8,padding:16}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A",marginBottom:10}}>Recherche invité</div>
+                  <input value={daySearch} onChange={e=>setDaySearch(e.target.value)} placeholder="Taper un prénom ou un nom..." style={{width:"100%",padding:"12px 14px",borderRadius:8,border:"1px solid #D4C5B0",background:"#FAF6F0",fontFamily:"'Outfit',sans-serif",fontSize:15,outline:"none",marginBottom:10}}/>
+                  {daySearch.trim()&&!dayGuestResults.length&&<div style={{fontSize:12,color:"#B0A090",fontStyle:"italic"}}>Aucun invité trouvé.</div>}
+                  {dayGuestResults.map(g=>{const seat=findGuestSeat(g);const evs=EVENT_CATEGORIES.filter(ev=>guestEvents?.[g]?.[ev.key]);return(
+                    <div key={g} style={{padding:"10px 0",borderTop:"1px solid #F0E8DC",display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}}>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:500,color:"#3A2E22"}}>{g}</div>
+                        <div style={{fontSize:12,color:seat?"#6B8E6B":"#C07050",marginTop:2}}>{seat?`${seat.table.name} · place ${seat.seat} · ${seat.zone?.name||"Zone inconnue"}`:"Non placé"}</div>
+                        {!!evs.length&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{evs.map(ev=><span key={ev.key} style={{fontSize:10,padding:"2px 6px",borderRadius:12,background:ev.color+"18",color:ev.color}}>{ev.label}</span>)}</div>}
+                      </div>
+                      {seat&&<button onClick={()=>{setActiveZone(seat.zone?.id||activeZone);setSelTable(seat.table.id);setEditTable(seat.table.id);setTab("seating");}} style={{padding:"6px 9px",borderRadius:7,border:"1px solid #D4C5B0",background:"#FFFCF7",cursor:"pointer",fontSize:11,color:"#5A4A3A"}}>Localiser</button>}
+                    </div>
+                  );})}
+                </section>
+
+                <section style={{background:"#FFFCF7",border:"1px solid #E8DDD0",borderRadius:8,padding:16}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A"}}>Planning prestataires</div>
+                    <button onClick={()=>setTab("prestas")} style={{border:"none",background:"transparent",color:"#8B7355",fontSize:11,cursor:"pointer"}}>Modifier</button>
+                  </div>
+                  {dayTimeline.slice(0,14).map((it,i)=>{const cat=PRESTA_CATEGORIES.find(c=>c.key===it.p.category);return(
+                    <div key={`${it.p.id}-${it.label}-${i}`} style={{display:"grid",gridTemplateColumns:"54px 1fr",gap:10,padding:"8px 0",borderTop:i?"1px solid #F0E8DC":"none"}}>
+                      <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A"}}>{it.time}</div>
+                      <div>
+                        <div style={{fontSize:13,color:"#3A2E22"}}>{it.label} · {cat?.label||"Prestataire"}</div>
+                        <div style={{fontSize:12,color:"#8A7A6A"}}>{it.p.name}{it.p.phone?` · ${it.p.phone}`:""}{it.p.location?` · ${it.p.location}`:""}</div>
+                      </div>
+                    </div>
+                  );})}
+                  {!dayTimeline.length&&<div style={{fontSize:12,color:"#B0A090",fontStyle:"italic"}}>Aucun horaire prestataire renseigné.</div>}
+                </section>
+              </div>
+
+              <div style={{display:"grid",gap:14}}>
+                <section style={{background:"#FFFCF7",border:"1px solid #E8DDD0",borderRadius:8,padding:16}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A",marginBottom:10}}>Prestataires du jour</div>
+                  <div style={{display:"grid",gap:8}}>
+                    {prestataires.slice(0,10).map(p=>{const cat=PRESTA_CATEGORIES.find(c=>c.key===p.category);const status=p.dayStatus||"attendu";return(
+                      <div key={p.id} style={{border:"1px solid #F0E8DC",borderRadius:8,padding:10,background:"#FAF6F0"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center"}}>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:500,color:"#3A2E22"}}>{cat?.icon} {p.name}</div>
+                            <div style={{fontSize:11,color:"#8A7A6A",marginTop:2}}>{cat?.label||"Prestataire"}{p.phone?` · ${p.phone}`:""}{p.arrivalTime?` · arrivée ${p.arrivalTime}`:""}</div>
+                          </div>
+                          <span style={{fontSize:10,textTransform:"uppercase",letterSpacing:1,padding:"3px 7px",borderRadius:12,background:status==="termine"?"#EEF8EA":status==="installe"?"#EAF4FF":status==="arrive"?"#FFF5E6":"#F0E8DC",color:status==="termine"?"#4F7A45":status==="installe"?"#4C78A8":status==="arrive"?"#9A6A30":"#8A7A6A"}}>{status}</span>
+                        </div>
+                        {!editLocked&&<div style={{display:"flex",gap:5,marginTop:8,flexWrap:"wrap"}}>
+                          {["attendu","arrive","installe","termine"].map(st=><button key={st} onClick={()=>setPrestataires(prestataires.map(x=>x.id===p.id?{...x,dayStatus:st}:x))} style={{fontSize:10,padding:"4px 7px",borderRadius:6,border:"1px solid #D4C5B0",background:status===st?"#EDE5D8":"#FFFCF7",cursor:"pointer",color:"#5A4A3A"}}>{st}</button>)}
+                        </div>}
+                      </div>
+                    );})}
+                    {!prestataires.length&&<div style={{fontSize:12,color:"#B0A090",fontStyle:"italic"}}>Aucun prestataire renseigné.</div>}
+                  </div>
+                </section>
+
+                <section style={{background:"#FFFCF7",border:"1px solid #E8DDD0",borderRadius:8,padding:16}}>
+                  <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A",marginBottom:10}}>Vue par table</div>
+                  <div style={{display:"grid",gap:8,maxHeight:520,overflowY:"auto",paddingRight:4}}>
+                    {dayTableCards.map(({table,zone,guests:gs,capacity})=>(
+                      <div key={table.id} style={{border:"1px solid #F0E8DC",borderRadius:8,padding:10,background:"#FAF6F0"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"center",marginBottom:6}}>
+                          <div>
+                            <div style={{fontSize:13,fontWeight:600,color:"#3A2E22"}}>{table.name}</div>
+                            <div style={{fontSize:11,color:"#8A7A6A"}}>{zone?.name||"Zone inconnue"}</div>
+                          </div>
+                          <button onClick={()=>{setActiveZone(zone?.id||activeZone);setSelTable(table.id);setEditTable(table.id);setTab("seating");}} style={{padding:"5px 8px",borderRadius:7,border:"1px solid #D4C5B0",background:"#FFFCF7",cursor:"pointer",fontSize:10,color:"#5A4A3A"}}>{gs.length}/{capacity}</button>
+                        </div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                          {gs.map(x=><span key={`${table.id}-${x.seat}`} style={{fontSize:10,padding:"3px 6px",borderRadius:6,background:"#FFFCF7",border:"1px solid #E8DDD0"}}>{x.seat}. {x.guest}</span>)}
+                          {!gs.length&&<span style={{fontSize:11,color:"#B0A090",fontStyle:"italic"}}>Table vide</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Content */}
-      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+      {tab!=="jourj"&&<div style={{flex:1,display:"flex",overflow:"hidden"}}>
 
         {/* Sidebar */}
         {(tab==="plan"||tab==="seating")&&(
-          <div style={{width:270,borderRight:"1px solid #E8DDD0",background:"#FFFCF7",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0}}>
+          <div style={{width:270,borderRight:"1px solid #E8DDD0",background:"#FFFCF7",display:"flex",flexDirection:"column",overflow:"hidden",flexShrink:0,pointerEvents:canEdit?"auto":"none",opacity:canEdit?1:.62}}>
             {tab==="plan"&&(
               <div style={{flex:1,overflowY:"auto",padding:0}}>
                 <div style={{display:"flex",borderBottom:"1px solid #F0E8DC"}}>
@@ -3912,7 +4068,7 @@ function App() {
 
               {curVenue.map(el=>{
                 const isR=el.type==="arbre"||el.type==="bassin"||el.type==="menhir";
-                return <VEl key={el.id} el={el} isR={isR} sel={selEl===el.id} canDrag={tab==="plan"} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
+                return <VEl key={el.id} el={el} isR={isR} sel={selEl===el.id} canDrag={canEdit&&tab==="plan"} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
                   onSelect={()=>{setSelEl(el.id);if(tab==="plan")setSideSection("props");}} onDrag={(x,y)=>dragVE(el.id,x,y)}/>;
               })}
 
@@ -3920,7 +4076,7 @@ function App() {
                 <svg style={{position:"absolute",top:0,left:0,width:4000,height:3000,pointerEvents:"none"}}>
                   <g style={{pointerEvents:"all"}}>
                     {curTables.map(t=>(<STbl key={t.id} table={t} sel={selTable===t.id} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
-                      onSelect={id=>{setSelTable(id);setEditTable(id);}} onDrag={dragTbl} asgn={assignments} onDrop={dropG} onSeatHover={setHoverSeat} guestEvents={guestEvents} canInteract={tab==="seating"}/>))}
+                      onSelect={id=>{setSelTable(id);setEditTable(id);}} onDrag={dragTbl} asgn={assignments} onDrop={dropG} onSeatHover={setHoverSeat} guestEvents={guestEvents} canInteract={canEdit&&tab==="seating"}/>))}
                   </g>
                 </svg>
               )}
@@ -4341,7 +4497,7 @@ function App() {
             </div>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
