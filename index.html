@@ -2451,6 +2451,8 @@ function App() {
   const [newGroupType,setNewGroupType] = useState("famille_proche");
   const [bulkGuestInput,setBulkGuestInput] = useState("");
   const [bulkGuestFeedback,setBulkGuestFeedback] = useState(null);
+  const [editingGuestName,setEditingGuestName] = useState("");
+  const [editingGuestValue,setEditingGuestValue] = useState("");
   const [zones,setZones] = useState(s?.zones||DEFAULT_ZONES);
   const [activeZone,setActiveZone] = useState(s?.activeZone||"z1");
   const [venueEls,setVenueEls] = useState(s?.venueEls||{z1:[
@@ -2610,6 +2612,22 @@ function App() {
   };
   const setGuestEvent=(name,key,val)=>setGuestEvents(prev=>({...prev,[name]:{...(prev[name]||{}),[key]:!!val}}));
   const setGuestRestriction=(name,key,val)=>setGuestRestrictions(prev=>({...prev,[name]:{...(prev[name]||{}),[key]:!!val}}));
+  const startEditGuest=name=>{if(!canEdit)return;setEditingGuestName(name);setEditingGuestValue(name);};
+  const cancelEditGuest=()=>{setEditingGuestName("");setEditingGuestValue("");};
+  const renameGuest=(oldName,newNameRaw=editingGuestValue)=>{
+    if(!canEdit)return;
+    const newName=(newNameRaw||"").replace(/\s+/g," ").trim();
+    if(!oldName||!newName){cancelEditGuest();return;}
+    if(newName===oldName){cancelEditGuest();return;}
+    if(guests.includes(newName)){alert("Un invité porte déjà ce nom.");return;}
+    setGuests(prev=>prev.map(g=>g===oldName?newName:g));
+    setAssignments(prev=>Object.fromEntries(Object.entries(prev).map(([k,v])=>[k,v===oldName?newName:v])));
+    setGuestEvents(prev=>{const next={...prev}; if(oldName in next){next[newName]=next[oldName]; delete next[oldName];} return next;});
+    setGuestRestrictions(prev=>{const next={...prev}; if(oldName in next){next[newName]=next[oldName]; delete next[oldName];} return next;});
+    setGuestGroups(prev=>{const next={...prev}; if(oldName in next){next[newName]=next[oldName]; delete next[oldName];} return next;});
+    setGroups(prev=>prev.map(gr=>({...gr,lockedCoreMemberIds:(gr.lockedCoreMemberIds||[]).map(n=>n===oldName?newName:n)})));
+    cancelEditGuest();
+  };
   const setGuestEventForAll=(key,val)=>{
     const next={...guestEvents};
     guests.forEach(g=>{next[g]={...(next[g]||{}),[key]:!!val};});
@@ -4378,11 +4396,19 @@ function App() {
                   ))}
                 </div>
               </div>
-              {sortedGuests.map(g=>{const sk=Object.keys(assignments).find(k=>assignments[k]===g);const tid=sk?.split("-")[0];const tb=allTables.find(t=>t.id===tid);return(
+              {sortedGuests.map(g=>{const sk=Object.keys(assignments).find(k=>assignments[k]===g);const tid=sk?.split("-")[0];const tb=allTables.find(t=>t.id===tid);const isEditingName=editingGuestName===g;return(
                 <div key={g} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",marginBottom:5,borderRadius:8,background:"#FFFCF7",border:"1px solid #E8DDD0"}}>
                   <div style={{display:"flex",flexDirection:"column",gap:6,flex:1,minWidth:0}}>
                     <div>
-                      <span style={{fontSize:13}}>{g}</span>
+                      {isEditingName?(
+                        <span style={{display:"inline-flex",alignItems:"center",gap:5,marginRight:8}}>
+                          <input value={editingGuestValue} onChange={e=>setEditingGuestValue(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")renameGuest(g);if(e.key==="Escape")cancelEditGuest();}} autoFocus style={{padding:"5px 8px",borderRadius:6,border:"1px solid #D4C5B0",background:"#FAF6F0",fontFamily:"'Outfit',sans-serif",fontSize:12,outline:"none",minWidth:190}}/>
+                          <button onClick={()=>renameGuest(g)} style={{border:"1px solid #D4C5B0",background:"#8B7355",color:"#FFFCF7",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10}}>OK</button>
+                          <button onClick={cancelEditGuest} style={{border:"1px solid #D4C5B0",background:"#FFFCF7",color:"#8A7A6A",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10}}>Annuler</button>
+                        </span>
+                      ):(
+                        <span onDoubleClick={()=>startEditGuest(g)} style={{fontSize:13,cursor:canEdit?"text":"default"}}>{g}</span>
+                      )}
                       {guestGroups[g]&&<span style={{marginLeft:8,fontSize:10,color:"#5A4A3A",background:"#EDE5D8",padding:"2px 7px",borderRadius:10}}>{groups.find(gr=>gr.id===guestGroups[g])?.name||"Groupe"}</span>}
                       {tb&&<span style={{marginLeft:8,fontSize:10,color:"#8A7A6A",background:"#F0E8DC",padding:"2px 7px",borderRadius:10}}>{tb.name}</span>}
                       {!tb&&<span style={{marginLeft:8,fontSize:10,color:"#C07050",background:"#FDF0EA",padding:"2px 7px",borderRadius:10}}>Non placé</span>}
@@ -4413,7 +4439,10 @@ function App() {
                       ))}
                     </div>
                   </div>
-                  <button onClick={()=>removeGuest(g)} style={{border:"none",background:"none",cursor:"pointer",color:"#C07050",fontSize:16,padding:0,lineHeight:1}}>×</button></div>);})}
+                  <div style={{display:"flex",gap:6,alignItems:"center",marginLeft:10}}>
+                    {!isEditingName&&<button onClick={()=>startEditGuest(g)} style={{border:"1px solid #D4C5B0",background:"#FFFCF7",cursor:"pointer",color:"#7A6A5A",fontSize:10,padding:"4px 8px",borderRadius:6,fontFamily:"'Outfit',sans-serif"}}>Modifier</button>}
+                    <button onClick={()=>removeGuest(g)} style={{border:"none",background:"none",cursor:"pointer",color:"#C07050",fontSize:16,padding:0,lineHeight:1}}>×</button>
+                  </div></div>);})}
             </div>
           </div>
         )}
