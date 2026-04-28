@@ -1913,6 +1913,14 @@ const EVENT_CATEGORIES = [
   {key:"diner",label:"Diner",color:"#E45756"},
   {key:"brunch",label:"Brunch",color:"#54A24B"},
 ];
+const DIETARY_RESTRICTIONS = [
+  {key:"vegetarien",label:"Végétarien",code:"VG",color:"#54A24B"},
+  {key:"vegan",label:"Vegan",code:"VE",color:"#2F7D32"},
+  {key:"sans_porc",label:"Sans porc",code:"SP",color:"#8B7355"},
+  {key:"sans_gluten",label:"Sans gluten",code:"SG",color:"#F39C6B"},
+  {key:"sans_lactose",label:"Sans lactose",code:"SL",color:"#4C78A8"},
+  {key:"allergie",label:"Allergie / spécial",code:"ALL",color:"#E45756"},
+];
 const GROUP_TYPE_OPTIONS = [
   "famille_proche","famille_elargie","temoins","amis_enfance","collegues","enfants","groupe_marie","groupe_mariee","autre"
 ];
@@ -2247,6 +2255,7 @@ function migrateSnapshotData(rawData){
   const tables = d.tables && typeof d.tables==="object" ? d.tables : {};
   const tableGroupsRaw = d.tableGroups && typeof d.tableGroups==="object" ? d.tableGroups : {};
   const guestEvents = d.guestEvents && typeof d.guestEvents==="object" ? d.guestEvents : {};
+  const guestRestrictions = d.guestRestrictions && typeof d.guestRestrictions==="object" ? d.guestRestrictions : {};
   const assignments = d.assignments && typeof d.assignments==="object" ? d.assignments : {};
   const zoomState = d.zoomState && typeof d.zoomState==="object" ? d.zoomState : {};
   const guests = Array.isArray(d.guests) ? d.guests.filter(g=>typeof g==="string"&&g.trim()) : [];
@@ -2276,6 +2285,7 @@ function migrateSnapshotData(rawData){
     groups,
     guestGroups,
     guestEvents,
+    guestRestrictions,
     zones,
     activeZone,
     venueEls,
@@ -2433,6 +2443,7 @@ function App() {
   const [daySearch,setDaySearch] = useState("");
   const [guests,setGuests] = useState(s?.guests||INIT_GUESTS);
   const [guestEvents,setGuestEvents] = useState(s?.guestEvents||{});
+  const [guestRestrictions,setGuestRestrictions] = useState(s?.guestRestrictions||{});
   const [groups,setGroups] = useState(s?.groups||[]);
   const [guestGroups,setGuestGroups] = useState(s?.guestGroups||{});
   const [newGuest,setNewGuest] = useState("");
@@ -2513,9 +2524,9 @@ function App() {
     save({
       version:SNAPSHOT_VERSION,
       exportedAt:nowIso(),
-      data:{guests,groups,guestGroups,guestEvents,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,meta:{stateVersion,processedCommandIds:Array.from(processedCommandIdsRef.current)}}
+      data:{guests,groups,guestGroups,guestEvents,guestRestrictions,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,meta:{stateVersion,processedCommandIds:Array.from(processedCommandIdsRef.current)}}
     })
-  },[guests,groups,guestGroups,guestEvents,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,stateVersion]);
+  },[guests,groups,guestGroups,guestEvents,guestRestrictions,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,stateVersion]);
   useEffect(()=>{
     if(didInitAutoSize.current)return;
     didInitAutoSize.current=true;
@@ -2593,10 +2604,12 @@ function App() {
     setGuests(guests.filter(g=>g!==name));
     const a={...assignments};Object.keys(a).forEach(k=>{if(a[k]===name)delete a[k]});setAssignments(a);
     const ge={...guestEvents};delete ge[name];setGuestEvents(ge);
+    const gr={...guestRestrictions};delete gr[name];setGuestRestrictions(gr);
     const gg={...guestGroups}; delete gg[name]; setGuestGroups(gg);
     setGroups(prev=>prev.map(gr=>({...gr,lockedCoreMemberIds:(gr.lockedCoreMemberIds||[]).filter(n=>n!==name)})));
   };
   const setGuestEvent=(name,key,val)=>setGuestEvents(prev=>({...prev,[name]:{...(prev[name]||{}),[key]:!!val}}));
+  const setGuestRestriction=(name,key,val)=>setGuestRestrictions(prev=>({...prev,[name]:{...(prev[name]||{}),[key]:!!val}}));
   const setGuestEventForAll=(key,val)=>{
     const next={...guestEvents};
     guests.forEach(g=>{next[g]={...(next[g]||{}),[key]:!!val};});
@@ -2714,7 +2727,7 @@ function App() {
   };
 
   /* ─ Snapshot export/import ─ */
-  const snapshotData = useCallback(()=>({guests,groups,guestGroups,guestEvents,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,meta:{stateVersion,processedCommandIds:Array.from(processedCommandIdsRef.current)}}),[guests,groups,guestGroups,guestEvents,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,stateVersion]);
+  const snapshotData = useCallback(()=>({guests,groups,guestGroups,guestEvents,guestRestrictions,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,meta:{stateVersion,processedCommandIds:Array.from(processedCommandIdsRef.current)}}),[guests,groups,guestGroups,guestEvents,guestRestrictions,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,stateVersion]);
   const isObj = v => !!v && typeof v==="object" && !Array.isArray(v);
   const validateSnapshot = raw => {
     if(!raw||typeof raw!=="object") return "Fichier invalide.";
@@ -2732,6 +2745,7 @@ function App() {
     setGroups(m.groups||[]);
     setGuestGroups(m.guestGroups||{});
     setGuestEvents(m.guestEvents||{});
+    setGuestRestrictions(m.guestRestrictions||{});
     setZones(m.zones);
     const safeZone = m.zones.some(z=>z?.id===m.activeZone) ? m.activeZone : m.zones[0]?.id;
     setActiveZone(safeZone||"z1");
@@ -2800,13 +2814,22 @@ function App() {
           : `<rect x="${t.x-(t.width||140)/2}" y="${t.y-(t.height||60)/2}" width="${t.width||140}" height="${t.height||60}" rx="8" fill="${color}" fill-opacity="0.18" stroke="${color}" stroke-width="4"/>`;
       const chairSvg=chairs.map((ch,i)=>{
         const g=assignments[t.id+"-"+i]||"";
-        const parts=g.split(" ");
-        const label=parts.length>1?`${parts[0]} ${parts[1]?.[0]||""}.`:g;
-        return `<g><circle cx="${ch.x}" cy="${ch.y}" r="20" fill="${g?color+"33":"#FFFCF7"}" stroke="${g?color:"#C2B199"}" stroke-width="2"/><text x="${ch.x}" y="${ch.y+4}" text-anchor="middle" font-size="11" font-weight="600" fill="#3A2E22">${esc(label)}</text></g>`;
+        const diet=DIETARY_RESTRICTIONS.filter(r=>guestRestrictions?.[g]?.[r.key]);
+        const badge=diet[0]?`<circle cx="${ch.x+15}" cy="${ch.y-15}" r="6" fill="${diet[0].color}" stroke="#fff" stroke-width="1.5"/>`:"";
+        return `<g><circle cx="${ch.x}" cy="${ch.y}" r="20" fill="${g?color+"33":"#FFFCF7"}" stroke="${g?color:"#C2B199"}" stroke-width="2"/><text x="${ch.x}" y="${ch.y+5}" text-anchor="middle" font-size="13" font-weight="700" fill="#3A2E22">${g?i+1:""}</text>${badge}</g>`;
       }).join("");
       return `<g><g transform="rotate(${+(t.rotation||0)} ${+t.x} ${+t.y})">${body}<text x="${t.x}" y="${t.y+5}" text-anchor="middle" font-size="18" font-weight="700" fill="${color}">${esc(t.name)}</text></g>${chairSvg}</g>`;
     }).join("");
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plan de table paysage</title><style>@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#3A2E22;background:white}.page{padding:10mm}.top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6mm}.title{font-size:22px;font-weight:700}.meta{font-size:12px;color:#7A6A5A;text-align:right}.map{width:100%;height:176mm;border:1px solid #D4C5B0;border-radius:8px;background:#FAF6F0}svg text{font-family:Arial,sans-serif}@media screen{body{background:#eee}.page{max-width:1200px;margin:0 auto;background:white;min-height:100vh}.printHint{display:block}}@media print{.printHint{display:none}}</style></head><body><div class="page"><div class="top"><div><div class="title">Plan de table - ${esc(zone?.name||"Zone active")}</div><div style="font-size:12px;color:#7A6A5A">${curTables.length} tables · ${curTables.reduce((n,t)=>n+tableGuests(t).length,0)} invités placés · ${new Date().toLocaleString("fr-FR")}</div></div><div class="meta">Château des Grotteaux<br/>Format paysage A4</div></div><svg class="map" viewBox="${x1} ${y1} ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${venueSvg}${tableSvg}</svg><p class="printHint" style="font-size:13px;color:#7A6A5A">Utilisez Partager / Imprimer puis Enregistrer en PDF sur le téléphone.</p></div><script>setTimeout(()=>window.print(),450);<\/script></body></html>`;
+    const legend = DIETARY_RESTRICTIONS.map(r=>`<span class="badge" style="border-color:${r.color};background:${r.color}18"><b style="color:${r.color}">${r.code}</b> ${esc(r.label)}</span>`).join("");
+    const listHtml = curTables.map(t=>{
+      const color=TABLE_COLORS[t.colorIdx%TABLE_COLORS.length];
+      const rows=tableGuests(t).map(x=>{
+        const badges=(x.restrictions||[]).map(r=>`<span class="mini" style="border-color:${r.color};background:${r.color}18;color:${r.color}">${r.code}</span>`).join("");
+        return `<div class="guest"><span class="seat">${x.seat}</span><span class="name">${esc(x.guest)}</span><span class="badges">${badges}</span></div>`;
+      }).join("") || `<div class="empty">Table vide</div>`;
+      return `<section class="tableList" style="border-left-color:${color}"><h2>${esc(t.name)} <span>${tableGuests(t).length}/${getChairs(t).length}</span></h2>${rows}</section>`;
+    }).join("");
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plan de table paysage</title><style>@page{size:A4 landscape;margin:8mm}*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:#3A2E22;background:white}.page{padding:9mm}.top{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:5mm}.title{font-size:22px;font-weight:700}.meta{font-size:12px;color:#7A6A5A;text-align:right}.map{width:100%;height:160mm;border:1px solid #D4C5B0;border-radius:8px;background:#FAF6F0}svg text{font-family:Arial,sans-serif}.legend{display:flex;gap:6px;flex-wrap:wrap;margin-top:5mm}.badge,.mini{display:inline-flex;align-items:center;gap:4px;border:1px solid #ddd;border-radius:999px;padding:2px 7px;font-size:10px}.lists{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm}.tableList{break-inside:avoid;border-left:4px solid #8B7355;background:#FFFCF7;border-radius:8px;padding:8px;margin-bottom:5mm}.tableList h2{font-size:14px;margin:0 0 6px;display:flex;justify-content:space-between}.tableList h2 span{font-size:11px;color:#7A6A5A}.guest{display:grid;grid-template-columns:24px 1fr auto;gap:6px;align-items:center;padding:3px 0;border-top:1px solid #eee;font-size:11px}.seat{font-weight:700;color:#5A4A3A}.name{font-weight:600}.badges{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end}.mini{font-size:9px;padding:1px 5px;font-weight:700}.empty{font-size:11px;color:#A09080;font-style:italic}.pageBreak{page-break-before:always}.printHint{font-size:13px;color:#7A6A5A}@media screen{body{background:#eee}.page{max-width:1200px;margin:0 auto;background:white;min-height:100vh}.printHint{display:block}}@media print{.printHint{display:none}}</style></head><body><div class="page"><div class="top"><div><div class="title">Plan de table - ${esc(zone?.name||"Zone active")}</div><div style="font-size:12px;color:#7A6A5A">${curTables.length} tables · ${curTables.reduce((n,t)=>n+tableGuests(t).length,0)} invités placés · ${new Date().toLocaleString("fr-FR")}</div></div><div class="meta">Château des Grotteaux<br/>Format paysage A4</div></div><svg class="map" viewBox="${x1} ${y1} ${w} ${h}" xmlns="http://www.w3.org/2000/svg">${venueSvg}${tableSvg}</svg><div class="legend">${legend}</div><p class="printHint">Utilisez Partager / Imprimer puis Enregistrer en PDF sur le téléphone.</p></div><div class="page pageBreak"><div class="top"><div><div class="title">Liste serveurs par table</div><div style="font-size:12px;color:#7A6A5A">Noms complets + restrictions alimentaires</div></div><div class="meta">Les numéros correspondent aux sièges du plan</div></div><div class="lists">${listHtml}</div></div><script>setTimeout(()=>window.print(),450);<\/script></body></html>`;
     const win = window.open("","_blank");
     if(!win){alert("Ouverture bloquée. Autorise les popups pour générer le PDF paysage.");return;}
     win.document.open();
@@ -2835,6 +2858,7 @@ function App() {
     groups:deepClone(groups),
     guestGroups:deepClone(guestGroups),
     guestEvents:deepClone(guestEvents),
+    guestRestrictions:deepClone(guestRestrictions),
     zones:deepClone(zones),
     activeZone,
     venueEls:deepClone(venueEls),
@@ -2846,15 +2870,17 @@ function App() {
     auditLog:deepClone(auditLog),
     planVersions:deepClone(planVersions),
     currentPlanVersionId,
+    prestataires:deepClone(prestataires),
     meta:{stateVersion,processedCommandIds:Array.from(processedCommandIdsRef.current)},
-  }),[guests,groups,guestGroups,guestEvents,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,stateVersion]);
+  }),[guests,groups,guestGroups,guestEvents,guestRestrictions,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,stateVersion]);
 
   const applyState = useCallback((next,{clearSelection=true}={})=>{
     const m = migrateSnapshotData(next);
-    setGuests(m.guests); setGroups(m.groups||[]); setGuestGroups(m.guestGroups||{}); setGuestEvents(m.guestEvents); setZones(m.zones); setActiveZone(m.activeZone);
+    setGuests(m.guests); setGroups(m.groups||[]); setGuestGroups(m.guestGroups||{}); setGuestEvents(m.guestEvents); setGuestRestrictions(m.guestRestrictions||{}); setZones(m.zones); setActiveZone(m.activeZone);
     setVenueEls(m.venueEls); setTables(m.tables); setTableGroups(m.tableGroups||{}); setAssignments(m.assignments); setZoomState(m.zoomState);
     setCheckpoints(m.checkpoints||[]); setAuditLog((m.auditLog||[]).slice(-MAX_AUDIT_LOG));
     setPlanVersions(m.planVersions||[]); setCurrentPlanVersionId(m.currentPlanVersionId||null);
+    setPrestataires(m.prestataires||[]);
     setStateVersion(Number.isFinite(+m?.meta?.stateVersion)?+m.meta.stateVersion:1);
     processedCommandIdsRef.current = new Set(m?.meta?.processedCommandIds||[]);
     if(clearSelection){ setSelEl(null); setSelTable(null); setEditTable(null); setSelectedTableIds([]); }
@@ -2945,6 +2971,7 @@ function App() {
         next.guests = next.guests.filter(g=>g!==name);
         Object.keys(next.assignments||{}).forEach(k=>{ if(next.assignments[k]===name) delete next.assignments[k]; });
         delete next.guestEvents?.[name];
+        delete next.guestRestrictions?.[name];
         diffSummary.push(`guest- ${name}`);
         break;
       }
@@ -3742,7 +3769,7 @@ function App() {
   const tableGuests = t => Object.entries(assignments||{})
     .filter(([k])=>k.startsWith(t.id+"-"))
     .sort(([a],[b])=>+a.split("-").pop()-+b.split("-").pop())
-    .map(([k,g])=>({guest:g,seat:+k.split("-").pop()+1,events:EVENT_CATEGORIES.filter(ev=>guestEvents?.[g]?.[ev.key]).map(ev=>ev.label)}));
+    .map(([k,g])=>({guest:g,seat:+k.split("-").pop()+1,events:EVENT_CATEGORIES.filter(ev=>guestEvents?.[g]?.[ev.key]).map(ev=>ev.label),restrictions:DIETARY_RESTRICTIONS.filter(r=>guestRestrictions?.[g]?.[r.key])}));
   const findGuestSeat = g => {
     const key = Object.keys(assignments||{}).find(k=>assignments[k]===g);
     if(!key) return null;
@@ -3874,12 +3901,12 @@ function App() {
                   <div style={{fontSize:13,fontWeight:600,color:"#5A4A3A",marginBottom:10}}>Recherche invité</div>
                   <input value={daySearch} onChange={e=>setDaySearch(e.target.value)} placeholder="Taper un prénom ou un nom..." style={{width:"100%",padding:"12px 14px",borderRadius:8,border:"1px solid #D4C5B0",background:"#FAF6F0",fontFamily:"'Outfit',sans-serif",fontSize:15,outline:"none",marginBottom:10}}/>
                   {daySearch.trim()&&!dayGuestResults.length&&<div style={{fontSize:12,color:"#B0A090",fontStyle:"italic"}}>Aucun invité trouvé.</div>}
-                  {dayGuestResults.map(g=>{const seat=findGuestSeat(g);const evs=EVENT_CATEGORIES.filter(ev=>guestEvents?.[g]?.[ev.key]);return(
+                  {dayGuestResults.map(g=>{const seat=findGuestSeat(g);const evs=EVENT_CATEGORIES.filter(ev=>guestEvents?.[g]?.[ev.key]);const diets=DIETARY_RESTRICTIONS.filter(r=>guestRestrictions?.[g]?.[r.key]);return(
                     <div key={g} style={{padding:"10px 0",borderTop:"1px solid #F0E8DC",display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}}>
                       <div>
                         <div style={{fontSize:14,fontWeight:500,color:"#3A2E22"}}>{g}</div>
                         <div style={{fontSize:12,color:seat?"#6B8E6B":"#C07050",marginTop:2}}>{seat?`${seat.table.name} · place ${seat.seat} · ${seat.zone?.name||"Zone inconnue"}`:"Non placé"}</div>
-                        {!!evs.length&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{evs.map(ev=><span key={ev.key} style={{fontSize:10,padding:"2px 6px",borderRadius:12,background:ev.color+"18",color:ev.color}}>{ev.label}</span>)}</div>}
+                        {!!(evs.length||diets.length)&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>{evs.map(ev=><span key={ev.key} style={{fontSize:10,padding:"2px 6px",borderRadius:12,background:ev.color+"18",color:ev.color}}>{ev.label}</span>)}{diets.map(r=><span key={r.key} style={{fontSize:10,padding:"2px 6px",borderRadius:12,border:`1px solid ${r.color}55`,background:r.color+"18",color:r.color,fontWeight:600}}>{r.code}</span>)}</div>}
                       </div>
                       {seat&&<button onClick={()=>{setActiveZone(seat.zone?.id||activeZone);setSelTable(seat.table.id);setEditTable(seat.table.id);setTab("seating");}} style={{padding:"6px 9px",borderRadius:7,border:"1px solid #D4C5B0",background:"#FFFCF7",cursor:"pointer",fontSize:11,color:"#5A4A3A"}}>Localiser</button>}
                     </div>
@@ -3939,7 +3966,7 @@ function App() {
                           <button onClick={()=>{setActiveZone(zone?.id||activeZone);setSelTable(table.id);setEditTable(table.id);setTab("seating");}} style={{padding:"5px 8px",borderRadius:7,border:"1px solid #D4C5B0",background:"#FFFCF7",cursor:"pointer",fontSize:10,color:"#5A4A3A"}}>{gs.length}/{capacity}</button>
                         </div>
                         <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                          {gs.map(x=><span key={`${table.id}-${x.seat}`} style={{fontSize:10,padding:"3px 6px",borderRadius:6,background:"#FFFCF7",border:"1px solid #E8DDD0"}}>{x.seat}. {x.guest}</span>)}
+                          {gs.map(x=><span key={`${table.id}-${x.seat}`} style={{fontSize:10,padding:"3px 6px",borderRadius:6,background:"#FFFCF7",border:"1px solid #E8DDD0"}}>{x.seat}. {x.guest} {(x.restrictions||[]).map(r=><b key={r.key} style={{marginLeft:3,color:r.color}}>{r.code}</b>)}</span>)}
                           {!gs.length&&<span style={{fontSize:11,color:"#B0A090",fontStyle:"italic"}}>Table vide</span>}
                         </div>
                       </div>
@@ -4161,7 +4188,7 @@ function App() {
                 <svg style={{position:"absolute",top:0,left:0,width:4000,height:3000,pointerEvents:"none"}}>
                   <g style={{pointerEvents:"all"}}>
                     {curTables.map(t=>(<STbl key={t.id} table={t} sel={selTable===t.id} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
-                      onSelect={id=>{setSelTable(id);setEditTable(id);}} onDrag={dragTbl} asgn={assignments} onDrop={dropG} onSeatHover={setHoverSeat} guestEvents={guestEvents} canInteract={canEdit&&tab==="seating"}/>))}
+                      onSelect={id=>{setSelTable(id);setEditTable(id);}} onDrag={dragTbl} asgn={assignments} onDrop={dropG} onSeatHover={setHoverSeat} guestEvents={guestEvents} guestRestrictions={guestRestrictions} canInteract={canEdit&&tab==="seating"}/>))}
                   </g>
                 </svg>
               )}
@@ -4188,6 +4215,9 @@ function App() {
                   {hoverSeat.events.length?hoverSeat.events.map(ev=>(
                     <span key={ev.key} style={{fontSize:9,padding:"2px 6px",borderRadius:999,border:`1px solid ${ev.color}66`,background:ev.color+"20",color:"#4A3A2A"}}>{ev.label}</span>
                   )):<span style={{fontSize:10,color:"#A09080"}}>Aucun événement coché</span>}
+                  {(hoverSeat.restrictions||[]).map(r=>(
+                    <span key={r.key} style={{fontSize:9,padding:"2px 6px",borderRadius:999,border:`1px solid ${r.color}66`,background:r.color+"20",color:r.color,fontWeight:600}}>{r.code}</span>
+                  ))}
                 </div>
               </div>
             )}
@@ -4356,6 +4386,7 @@ function App() {
                       {guestGroups[g]&&<span style={{marginLeft:8,fontSize:10,color:"#5A4A3A",background:"#EDE5D8",padding:"2px 7px",borderRadius:10}}>{groups.find(gr=>gr.id===guestGroups[g])?.name||"Groupe"}</span>}
                       {tb&&<span style={{marginLeft:8,fontSize:10,color:"#8A7A6A",background:"#F0E8DC",padding:"2px 7px",borderRadius:10}}>{tb.name}</span>}
                       {!tb&&<span style={{marginLeft:8,fontSize:10,color:"#C07050",background:"#FDF0EA",padding:"2px 7px",borderRadius:10}}>Non placé</span>}
+                      {DIETARY_RESTRICTIONS.filter(r=>guestRestrictions?.[g]?.[r.key]).map(r=><span key={r.key} style={{marginLeft:6,fontSize:10,color:r.color,background:r.color+"18",border:`1px solid ${r.color}55`,padding:"2px 7px",borderRadius:10,fontWeight:600}}>{r.code}</span>)}
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
                       <span style={{fontSize:10,color:"#8A7A6A"}}>Groupe</span>
@@ -4369,6 +4400,15 @@ function App() {
                         <label key={c.key} style={{display:"flex",alignItems:"center",gap:5,padding:"2px 7px",borderRadius:999,border:`1px solid ${c.color}66`,background:(guestEvents[g]&&guestEvents[g][c.key])?c.color+"22":"#FAF6F0",fontSize:10,color:"#4A3A2A",cursor:"pointer",userSelect:"none"}}>
                           <input type="checkbox" checked={!!(guestEvents[g]&&guestEvents[g][c.key])} onChange={e=>setGuestEvent(g,c.key,e.target.checked)} style={{accentColor:c.color}}/>
                           <span>{c.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                      <span style={{fontSize:10,color:"#8A7A6A",alignSelf:"center"}}>Restrictions</span>
+                      {DIETARY_RESTRICTIONS.map(r=>(
+                        <label key={r.key} style={{display:"flex",alignItems:"center",gap:5,padding:"2px 7px",borderRadius:999,border:`1px solid ${r.color}66`,background:(guestRestrictions[g]&&guestRestrictions[g][r.key])?r.color+"22":"#FAF6F0",fontSize:10,color:"#4A3A2A",cursor:"pointer",userSelect:"none"}}>
+                          <input type="checkbox" checked={!!(guestRestrictions[g]&&guestRestrictions[g][r.key])} onChange={e=>setGuestRestriction(g,r.key,e.target.checked)} style={{accentColor:r.color}}/>
+                          <span>{r.code}</span>
                         </label>
                       ))}
                     </div>
@@ -4632,7 +4672,7 @@ function VEl({el,isR,sel,canDrag,onSelect,onDrag,zoom,panX,panY,containerRef}) {
 }
 
 /* ═══ SVG Table ═══ */
-function STbl({table,sel,onSelect,onDrag,asgn,onDrop,zoom,panX,panY,containerRef,onSeatHover,guestEvents,canInteract=true}) {
+function STbl({table,sel,onSelect,onDrag,asgn,onDrop,zoom,panX,panY,containerRef,onSeatHover,guestEvents,guestRestrictions,canInteract=true}) {
   const dr=useRef(false);
   const off=useRef({x:0,y:0});
   const chairDrag=useRef(null);
@@ -4689,6 +4729,7 @@ function STbl({table,sel,onSelect,onDrag,asgn,onDrop,zoom,panX,panY,containerRef
       x:ch.x,
       y:ch.y,
       events:EVENT_CATEGORIES.filter(ev=>guestEvents?.[guest]?.[ev.key]).map(ev=>({key:ev.key,label:ev.label,color:ev.color})),
+      restrictions:DIETARY_RESTRICTIONS.filter(r=>guestRestrictions?.[guest]?.[r.key]),
     });
   };
 
@@ -4705,9 +4746,10 @@ function STbl({table,sel,onSelect,onDrag,asgn,onDrop,zoom,panX,panY,containerRef
         :(<rect x={table.x-table.width/2} y={table.y-table.height/2} width={table.width} height={table.height} rx={6} fill={c} fillOpacity={0.15} stroke={sel?c:c+"88"} strokeWidth={sel?3:2}/>)}
         <text x={table.x} y={table.y} textAnchor="middle" dominantBaseline="central" fill={c} fontFamily="'Cormorant Garamond',serif" fontSize={13} fontWeight={600} style={{pointerEvents:"none"}}>{table.name}</text>
       </g>
-      {chairs.map((ch,i)=>{const g=asgn[table.id+"-"+i];return(
+      {chairs.map((ch,i)=>{const g=asgn[table.id+"-"+i];const diet=DIETARY_RESTRICTIONS.filter(r=>guestRestrictions?.[g]?.[r.key]);return(
         <g key={i} onDragOver={e=>{e.preventDefault();e.stopPropagation();}} onDrop={e=>{e.preventDefault();e.stopPropagation();const gn=e.dataTransfer.getData("guest");if(gn)onDrop(gn,table.id,i);}}>
           <circle cx={ch.x} cy={ch.y} r={CHAIR_R} fill={g?c+"30":"#F5EDE3"} stroke={g?c:"#C2B199"} strokeWidth={g?2:1.5} strokeDasharray={g?"":"3,3"} style={{cursor:"grab"}} onPointerDown={e=>chairDown(e,i)} onPointerMove={e=>chairMove(e,i)} onPointerUp={chairUp} onPointerEnter={()=>showSeatCard(g,i,ch)} onPointerLeave={()=>onSeatHover?.(null)}/>
+          {!!diet.length&&<circle cx={ch.x+CHAIR_R-2} cy={ch.y-CHAIR_R+2} r={5} fill={diet[0].color} stroke="#FFFCF7" strokeWidth={1.5} style={{pointerEvents:"none"}}/>}
           {g?(()=>{
             const words=g.split(" ");const firstName=words[0]||"";const lastName=words.slice(1).join(" ");
             const maxChars=Math.floor(CHAIR_R*2/3.2);
