@@ -1927,6 +1927,14 @@ const GROUP_TYPE_OPTIONS = [
 const PLAN_VERSION_STATUSES = ["draft","validated","sent_caterer"];
 const uid = () => Math.random().toString(36).substr(2,9);
 const STORAGE_KEY = "grotteaux_wedding_v3";
+const CLOUD_PASSWORD_KEY = "grotteaux_wedding_cloud_password";
+const CLOUD_API_BASE_KEY = "grotteaux_wedding_cloud_api_base";
+const getCloudApiBase = () => {
+  const configured = (window.WEDNANA_API_BASE || localStorage.getItem(CLOUD_API_BASE_KEY) || "").replace(/\/$/,"");
+  if(configured) return configured;
+  return /^https?:$/.test(window.location.protocol) ? "" : null;
+};
+const cloudApiUrl = path => `${getCloudApiBase()||""}${path}`;
 const save = d => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d))}catch(e){} };
 const load = () => { try{const r=localStorage.getItem(STORAGE_KEY);return r?JSON.parse(r):null}catch(e){return null} };
 const loadEmbeddedSnapshot = () => {
@@ -2501,8 +2509,13 @@ function App() {
   const [compareVersionB,setCompareVersionB] = useState("");
   const [commandAlerts,setCommandAlerts] = useState([]);
   const [historyTick,setHistoryTick] = useState(0);
+  const [cloudStatus,setCloudStatus] = useState(()=>getCloudApiBase()?{kind:"loading",label:"Cloud: chargement"}:{kind:"local",label:"Mode local"});
   const historyRef = useRef([]);
   const futureRef = useRef([]);
+  const cloudReadyRef = useRef(false);
+  const cloudSaveTimerRef = useRef(null);
+  const cloudPasswordRef = useRef(null);
+  const applyingCloudRef = useRef(false);
   const processedCommandIdsRef = useRef(new Set(s?.meta?.processedCommandIds||[]));
 
   /* ── Zoom state per zone ── */
@@ -2759,6 +2772,7 @@ function App() {
   };
   const applySnapshot = d => {
     const m = migrateSnapshotData(d);
+    applyingCloudRef.current = true;
     setGuests(m.guests);
     setGroups(m.groups||[]);
     setGuestGroups(m.guestGroups||{});
@@ -2790,7 +2804,96 @@ function App() {
     historyRef.current=[];
     futureRef.current=[];
     setHistoryTick(v=>v+1);
+    setTimeout(()=>{applyingCloudRef.current=false;},0);
   };
+  const getCloudPassword = () => {
+    if(cloudPasswordRef.current) return cloudPasswordRef.current;
+    const stored = localStorage.getItem(CLOUD_PASSWORD_KEY);
+    if(stored){cloudPasswordRef.current=stored;return stored;}
+    const entered = prompt("Mot de passe du cloud partagé Wednana");
+    if(!entered) return null;
+    cloudPasswordRef.current = entered;
+    localStorage.setItem(CLOUD_PASSWORD_KEY,entered);
+    return entered;
+  };
+  const cloudFetch = async (path,options={}) => {
+    const base = getCloudApiBase();
+    if(base===null) throw new Error("cloud_unavailable_on_file");
+    const password = getCloudPassword();
+    if(!password) throw new Error("missing_cloud_password");
+    const res = await fetch(cloudApiUrl(path),{
+      ...options,
+      headers:{
+        "Content-Type":"application/json",
+        "x-plan-password":password,
+        ...(options.headers||{}),
+      },
+    });
+    if(res.status===401){
+      localStorage.removeItem(CLOUD_PASSWORD_KEY);
+      cloudPasswordRef.current=null;
+      throw new Error("bad_cloud_password");
+    }
+    if(!res.ok){
+      const txt = await res.text().catch(()=>"");
+      throw new Error(txt||`cloud_http_${res.status}`);
+    }
+    return res.json();
+  };
+  const pushCloudSnapshot = useCallback(async (snapshot,manual=false)=>{
+    if(getCloudApiBase()===null){
+      if(manual) alert("Le cloud est disponible depuis l'URL Railway, pas depuis le fichier local.");
+      return false;
+    }
+    try{
+      setCloudStatus({kind:"saving",label:"Cloud: sauvegarde"});
+      const res = await cloudFetch("/api/plan",{method:"PUT",body:JSON.stringify({data:snapshot})});
+      setCloudStatus({kind:"synced",label:`Cloud: sauvegardé ${new Date(res.updatedAt||Date.now()).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}`});
+      return true;
+    }catch(err){
+      console.warn("Sauvegarde cloud impossible",err);
+      setCloudStatus({kind:"error",label:err.message==="bad_cloud_password"?"Cloud: mot de passe incorrect":"Cloud: hors ligne"});
+      if(manual) alert("Sauvegarde cloud impossible. Vérifie Railway, PostgreSQL et le mot de passe.");
+      return false;
+    }
+  },[]);
+  const loadCloudSnapshot = useCallback(async (manual=false)=>{
+    if(getCloudApiBase()===null){
+      if(manual) alert("Ouvre le site depuis l'URL Railway pour activer le cloud partagé.");
+      setCloudStatus({kind:"local",label:"Mode local"});
+      return false;
+    }
+    try{
+      setCloudStatus({kind:"loading",label:"Cloud: chargement"});
+      const res = await cloudFetch("/api/plan");
+      if(res.data){
+        applySnapshot(res.data?.data ? res.data.data : res.data);
+        cloudReadyRef.current=true;
+        setCloudStatus({kind:"synced",label:`Cloud: chargé ${new Date(res.updatedAt||Date.now()).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}`});
+      }else{
+        const snapshot = {version:SNAPSHOT_VERSION,exportedAt:nowIso(),data:snapshotData()};
+        cloudReadyRef.current=true;
+        await pushCloudSnapshot(snapshot,true);
+      }
+      return true;
+    }catch(err){
+      console.warn("Chargement cloud impossible",err);
+      setCloudStatus({kind:"error",label:err.message==="bad_cloud_password"?"Cloud: mot de passe incorrect":"Cloud: indisponible"});
+      if(manual) alert("Chargement cloud impossible. Le site reste sur la sauvegarde locale.");
+      return false;
+    }
+  },[pushCloudSnapshot,snapshotData]);
+  useEffect(()=>{
+    loadCloudSnapshot(false);
+    return ()=>{if(cloudSaveTimerRef.current)clearTimeout(cloudSaveTimerRef.current);};
+  },[]);
+  useEffect(()=>{
+    if(!cloudReadyRef.current || applyingCloudRef.current || getCloudApiBase()===null) return;
+    const snapshot = {version:SNAPSHOT_VERSION,exportedAt:nowIso(),data:snapshotData()};
+    if(cloudSaveTimerRef.current)clearTimeout(cloudSaveTimerRef.current);
+    setCloudStatus(prev=>prev.kind==="loading"?prev:{kind:"pending",label:"Cloud: modifié"});
+    cloudSaveTimerRef.current=setTimeout(()=>pushCloudSnapshot(snapshot,false),1800);
+  },[guests,groups,guestGroups,guestEvents,guestRestrictions,zones,activeZone,venueEls,tables,tableGroups,assignments,zoomState,checkpoints,auditLog,planVersions,currentPlanVersionId,prestataires,stateVersion]);
   const exportProject = () => {
     const snapshot = {version:SNAPSHOT_VERSION,exportedAt:new Date().toISOString(),data:snapshotData()};
     const blob = new Blob([JSON.stringify(snapshot,null,2)],{type:"application/json"});
@@ -3843,6 +3946,9 @@ function App() {
         <div className="app-actions">
           <span>{guests.length} invités</span><span>{allTables.length} tables</span><span>{totalSeats} places</span>
           <span style={{color:unassignedGuests.length>0?"#C07050":"#6B8E6B",fontWeight:500}}>{unassignedGuests.length} non placé{unassignedGuests.length!==1?"s":""}</span>
+          <span title={getCloudApiBase()===null?"Ouvre l'URL Railway pour activer la synchro cloud.":"Synchronisation cloud partagée"} style={{color:cloudStatus.kind==="error"?"#C07050":cloudStatus.kind==="local"?"#A09080":"#4F7A45",fontWeight:600}}>{cloudStatus.label}</span>
+          {getCloudApiBase()!==null&&<button onClick={()=>loadCloudSnapshot(true)} style={{border:"1px solid #D4C5B0",background:"#FFFCF7",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:"#5A4A3A",fontFamily:"'Outfit',sans-serif"}}>Charger cloud</button>}
+          {getCloudApiBase()!==null&&<button onClick={()=>pushCloudSnapshot({version:SNAPSHOT_VERSION,exportedAt:nowIso(),data:snapshotData()},true)} style={{border:"1px solid #D4C5B0",background:"#FFFCF7",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:"#5A4A3A",fontFamily:"'Outfit',sans-serif"}}>Sauver cloud</button>}
           <button onClick={()=>{if(editLocked){if(confirm("Déverrouiller l'édition ? Les modifications seront sauvegardées automatiquement."))setEditLocked(false);}else setEditLocked(true);}} style={{border:`1px solid ${editLocked?"#D7A66A":"#8BAA78"}`,background:editLocked?"#FFF5E6":"#EEF8EA",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:"pointer",color:editLocked?"#9A6A30":"#4F7A45",fontFamily:"'Outfit',sans-serif",fontWeight:600}}>{editLocked?"Edition verrouillée":"Edition ouverte"}</button>
           <button onClick={()=>undo()} disabled={!historyRef.current.length} style={{border:"1px solid #E8DDD0",background:historyRef.current.length?"#FFFCF7":"#F6F1EA",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:historyRef.current.length?"pointer":"not-allowed",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Undo</button>
           <button onClick={()=>redo()} disabled={!futureRef.current.length} style={{border:"1px solid #E8DDD0",background:futureRef.current.length?"#FFFCF7":"#F6F1EA",borderRadius:6,padding:"3px 10px",fontSize:10,cursor:futureRef.current.length?"pointer":"not-allowed",color:"#7A6A5A",fontFamily:"'Outfit',sans-serif"}}>Redo</button>
