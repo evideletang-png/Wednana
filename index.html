@@ -3734,6 +3734,16 @@ function App() {
     if(n==="__MOVE_CHAIR__"){moveManualChair(tid,si,mx,my);return;}
     const a={...assignments};Object.keys(a).forEach(k=>{if(a[k]===n)delete a[k]});a[tid+"-"+si]=n;setAssignments(a);
   };
+  const moveGuestToTable=(guest,tableId)=>{
+    if(!canEdit||!guest||!tableId)return;
+    const table=allTables.find(t=>t.id===tableId);
+    if(!table)return;
+    const seats=getChairs(table).length;
+    const occupied=new Set(Object.keys(assignments).filter(k=>k.startsWith(tableId+"-")&&assignments[k]!==guest).map(k=>+k.split("-")[1]));
+    const free=Array.from({length:seats},(_,i)=>i).find(i=>!occupied.has(i));
+    if(free===undefined){alert(`${table.name} est pleine.`);return;}
+    dropG(guest,tableId,free);
+  };
   const unassign=n=>{if(!canEdit)return;const a={...assignments};Object.keys(a).forEach(k=>{if(a[k]===n)delete a[k]});setAssignments(a);};
 
   /* ─ Zones ─ */
@@ -4060,7 +4070,7 @@ function App() {
                   </button>
                 </div>
                 {curTables.map(t=>{const c=TABLE_COLORS[t.colorIdx%TABLE_COLORS.length];const sd=Object.keys(assignments).filter(k=>k.startsWith(t.id+"-")).length;const tg=groupForTableId(t.id);return(
-                  <div key={t.id} onClick={()=>{setSelTable(t.id);setEditTable(t.id);}} style={{padding:"9px 11px",marginBottom:5,borderRadius:8,border:`1px solid ${selTable===t.id?c:"#E8DDD0"}`,background:selTable===t.id?c+"08":"#FFFCF7",cursor:"pointer"}}>
+                  <div key={t.id} onClick={()=>{setSelTable(t.id);setEditTable(t.id);}} onDragOver={e=>{e.preventDefault();e.stopPropagation();}} onDrop={e=>{e.preventDefault();e.stopPropagation();const guest=e.dataTransfer.getData("guest");if(guest)moveGuestToTable(guest,t.id);}} style={{padding:"9px 11px",marginBottom:5,borderRadius:8,border:`1px solid ${selTable===t.id?c:"#E8DDD0"}`,background:selTable===t.id?c+"08":"#FFFCF7",cursor:"pointer"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <div style={{display:"flex",alignItems:"center",gap:7}}>
                         <input type="checkbox" checked={selectedTableSet.has(t.id)} onChange={e=>{e.stopPropagation();setSelectedTableIds(prev=>e.target.checked?Array.from(new Set([...prev,t.id])):prev.filter(x=>x!==t.id));}} onClick={e=>e.stopPropagation()}/>
@@ -4069,7 +4079,7 @@ function App() {
                       </div>
                       <button onClick={e=>{e.stopPropagation();removeTbl(t.id);}} style={{border:"none",background:"none",cursor:"pointer",color:"#C07050",fontSize:15,padding:0}}>×</button>
                     </div>
-                    <div style={{fontSize:10,color:"#A09080",marginTop:3,marginLeft:16}}>{sd}/{t.seats} places</div>
+                    <div style={{fontSize:10,color:"#A09080",marginTop:3,marginLeft:16}}>{sd}/{t.seats} places · déposer un invité ici</div>
                     {tg&&<div style={{fontSize:10,color:"#8A7A6A",marginTop:2,marginLeft:16}}>Groupe: {tg.name}</div>}
                   </div>);})}
                 {!!curTableGroups.length&&(
@@ -4265,7 +4275,7 @@ function App() {
                   {unassignedGuests.length===0&&<div style={{fontSize:11,color:"#B0A090",fontStyle:"italic",padding:6}}>Tous placés !</div>}
                   <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:1.5,color:"#A09080",margin:"12px 0 8px"}}>Placés ({assignedSet.size})</div>
                   {sortedAssignedGuests.map(g=>{const sk=Object.keys(assignments).find(k=>assignments[k]===g);const tid=sk?.split("-")[0];const tb=allTables.find(t=>t.id===tid);return(
-                    <div key={g} style={{padding:"5px 9px",marginBottom:2,borderRadius:6,background:"#F0EBE3",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span>{g} <span style={{color:"#A09080",fontSize:9}}>— {tb?.name}</span></span><button onClick={()=>unassign(g)} style={{border:"none",background:"none",cursor:"pointer",color:"#C07050",fontSize:13,padding:0,lineHeight:1}}>×</button></div>);})}
+                    <div key={g} draggable onDragStart={e=>e.dataTransfer.setData("guest",g)} style={{padding:"5px 9px",marginBottom:2,borderRadius:6,background:"#F0EBE3",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"grab",userSelect:"none"}}><span>{g} <span style={{color:"#A09080",fontSize:9}}>— {tb?.name}</span></span><button onClick={()=>unassign(g)} style={{border:"none",background:"none",cursor:"pointer",color:"#C07050",fontSize:13,padding:0,lineHeight:1}}>×</button></div>);})}
                 </div>
               )}
             </>)}
@@ -4761,9 +4771,18 @@ function STbl({table,sel,onSelect,onDrag,asgn,onDrop,zoom,panX,panY,containerRef
       restrictions:DIETARY_RESTRICTIONS.filter(r=>guestRestrictions?.[guest]?.[r.key]),
     });
   };
+  const dropOnTable=e=>{
+    if(!canInteract)return;
+    const guest=e.dataTransfer.getData("guest");
+    if(!guest)return;
+    e.preventDefault();
+    e.stopPropagation();
+    const free=chairs.findIndex((_,i)=>!asgn[table.id+"-"+i] || asgn[table.id+"-"+i]===guest);
+    if(free>=0) onDrop(guest,table.id,free);
+  };
 
   return(
-    <g data-interactive={canInteract?"1":undefined} style={{cursor:canInteract?"move":"default",pointerEvents:canInteract?"all":"none"}} onClick={e=>e.stopPropagation()} onPointerDown={down} onPointerMove={move} onPointerUp={up}>
+    <g data-interactive={canInteract?"1":undefined} style={{cursor:canInteract?"move":"default",pointerEvents:canInteract?"all":"none"}} onClick={e=>e.stopPropagation()} onPointerDown={down} onPointerMove={move} onPointerUp={up} onDragOver={e=>{if(canInteract){e.preventDefault();e.stopPropagation();}}} onDrop={dropOnTable}>
       <g transform={`rotate(${rot} ${table.x} ${table.y})`}>
         {table.shape==="round"?(<circle cx={table.x} cy={table.y} r={table.radius} fill={c} fillOpacity={0.15} stroke={sel?c:c+"88"} strokeWidth={sel?3:2}/>
         ):table.shape==="u"?(()=>{
