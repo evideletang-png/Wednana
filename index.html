@@ -1935,6 +1935,23 @@ const getCloudApiBase = () => {
   return /^https?:$/.test(window.location.protocol) ? "" : null;
 };
 const cloudApiUrl = path => `${getCloudApiBase()||""}${path}`;
+const cloudErrorLabel = err => {
+  const msg = err?.message || "";
+  if(msg==="database_not_configured") return "Cloud: base non reliée";
+  if(msg==="bad_cloud_password") return "Cloud: mot de passe incorrect";
+  if(msg==="missing_cloud_password") return "Cloud: mot de passe requis";
+  if(msg==="cloud_unavailable_on_file") return "Mode local";
+  if(msg.includes("Failed to fetch") || msg.includes("NetworkError")) return "Cloud: URL inaccessible";
+  return "Cloud: indisponible";
+};
+const cloudErrorHelp = err => {
+  const msg = err?.message || "";
+  if(msg==="database_not_configured") return "Dans Railway, ouvre le service web Wednana puis ajoute une Variable Reference DATABASE_URL vers le service Postgres.";
+  if(msg==="bad_cloud_password") return "Le mot de passe saisi ne correspond pas à PLAN_PASSWORD dans le service web Railway.";
+  if(msg==="cloud_unavailable_on_file") return "Ouvre l'URL publique Railway du site pour utiliser le cloud partagé.";
+  if(msg.includes("Failed to fetch") || msg.includes("NetworkError")) return "Vérifie que l'URL Railway est déployée et que l'adresse cloud configurée est correcte.";
+  return "Vérifie le déploiement Railway, la variable DATABASE_URL et PLAN_PASSWORD.";
+};
 const save = d => { try{localStorage.setItem(STORAGE_KEY,JSON.stringify(d))}catch(e){} };
 const load = () => { try{const r=localStorage.getItem(STORAGE_KEY);return r?JSON.parse(r):null}catch(e){return null} };
 const loadEmbeddedSnapshot = () => {
@@ -2836,7 +2853,9 @@ function App() {
     }
     if(!res.ok){
       const txt = await res.text().catch(()=>"");
-      throw new Error(txt||`cloud_http_${res.status}`);
+      let code = "";
+      try{code=JSON.parse(txt)?.error||"";}catch(_){}
+      throw new Error(code||txt||`cloud_http_${res.status}`);
     }
     return res.json();
   };
@@ -2852,8 +2871,8 @@ function App() {
       return true;
     }catch(err){
       console.warn("Sauvegarde cloud impossible",err);
-      setCloudStatus({kind:"error",label:err.message==="bad_cloud_password"?"Cloud: mot de passe incorrect":"Cloud: hors ligne"});
-      if(manual) alert("Sauvegarde cloud impossible. Vérifie Railway, PostgreSQL et le mot de passe.");
+      setCloudStatus({kind:"error",label:cloudErrorLabel(err)});
+      if(manual) alert(`${cloudErrorLabel(err)}\n\n${cloudErrorHelp(err)}`);
       return false;
     }
   },[]);
@@ -2878,8 +2897,8 @@ function App() {
       return true;
     }catch(err){
       console.warn("Chargement cloud impossible",err);
-      setCloudStatus({kind:"error",label:err.message==="bad_cloud_password"?"Cloud: mot de passe incorrect":"Cloud: indisponible"});
-      if(manual) alert("Chargement cloud impossible. Le site reste sur la sauvegarde locale.");
+      setCloudStatus({kind:"error",label:cloudErrorLabel(err)});
+      if(manual) alert(`${cloudErrorLabel(err)}\n\n${cloudErrorHelp(err)}\n\nLe site reste sur la sauvegarde locale.`);
       return false;
     }
   },[pushCloudSnapshot,snapshotData]);

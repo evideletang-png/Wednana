@@ -9,7 +9,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const PLAN_ID = process.env.PLAN_ID || "grotteaux-2026";
 const PLAN_PASSWORD = process.env.PLAN_PASSWORD || "grotteaux2026";
-const DATABASE_URL = process.env.DATABASE_URL;
+const DATABASE_URL =
+  process.env.DATABASE_URL ||
+  process.env.DATABASE_PRIVATE_URL ||
+  process.env.DATABASE_PUBLIC_URL;
 
 const app = express();
 app.use(express.json({ limit: "25mb" }));
