@@ -2059,11 +2059,58 @@ const VENUE_CATALOG = [
     {type:"tennis",label:"Court de tennis",w:140,h:70,color:"#C87848",icon:"🎾"},
     {type:"menhir",label:"Menhir",w:30,h:50,color:"#909090",icon:"🪨"},
   ]},
+  { cat:"Cérémonie", items:[
+    {type:"chaise",label:"Chaise",w:18,h:18,color:"#C8AC7E",icon:"💺"},
+    {type:"rangee_chaises",label:"Rangée de chaises",w:220,h:18,color:"#C8AC7E",icon:"▭"},
+    {type:"banc",label:"Banc",w:160,h:16,color:"#A88860",icon:"🪑"},
+    {type:"autel",label:"Autel / Pupitre",w:70,h:32,color:"#F5EDE3",icon:"✝"},
+    {type:"allee_nuptiale",label:"Allée nuptiale",w:90,h:280,color:"#E8D8B8",icon:"⇕"},
+  ]},
   { cat:"Annotations", items:[
     {type:"label",label:"Étiquette texte",w:120,h:30,color:"transparent",icon:"🏷"},
     {type:"zone",label:"Zone / Périmètre",w:200,h:150,color:"rgba(139,115,85,0.08)",icon:"⬜"},
+    {type:"parcelle",label:"Parcelle (fond)",w:240,h:180,color:"rgba(139,115,85,0.09)",icon:"▢"},
   ]},
 ];
+
+/* Métadonnées de rendu par type (kind = style visuel, z = ordre d'empilement) */
+const VENUE_META = {
+  parcelle:      {z:0, kind:"parcelle"},
+  zone:          {z:1, kind:"zone"},
+  parking:       {z:2, kind:"parking"},
+  pelouse:       {z:2, kind:"grass"},
+  parterre:      {z:3, kind:"flowers"},
+  tennis:        {z:3, kind:"tennis"},
+  riviere:       {z:4, kind:"river"},
+  bassin:        {z:4, kind:"waterRound"},
+  piscine:       {z:4, kind:"pool"},
+  allee:         {z:5, kind:"path"},
+  allee_v:       {z:5, kind:"path"},
+  allee_nuptiale:{z:5, kind:"aisle"},
+  pont:          {z:5, kind:"bridge"},
+  mur_ext:       {z:6, kind:"wall"},
+  haie:          {z:6, kind:"hedge"},
+  portail:       {z:6, kind:"gate"},
+  chateau:       {z:7, kind:"building", roof:"#6E5238"},
+  orangerie:     {z:7, kind:"building", roof:"#7E624A"},
+  batiment:      {z:7, kind:"building", roof:"#7A5C42"},
+  grange:        {z:7, kind:"building", roof:"#5C4632"},
+  chapelle:      {z:7, kind:"building", roof:"#4E3C2E"},
+  pavillon:      {z:7, kind:"building", roof:"#7E624A"},
+  tente:         {z:7, kind:"tent"},
+  scene:         {z:7, kind:"stage"},
+  bar:           {z:7, kind:"bar"},
+  piste:         {z:7, kind:"dance"},
+  entree:        {z:7, kind:"entry"},
+  autel:         {z:8, kind:"altar"},
+  arche:         {z:8, kind:"arch"},
+  banc:          {z:8, kind:"bench"},
+  chaise:        {z:8, kind:"chair"},
+  rangee_chaises:{z:8, kind:"chairRow"},
+  arbre:         {z:9, kind:"tree"},
+  menhir:        {z:9, kind:"menhir"},
+  label:         {z:10, kind:"label"},
+};
 
 /* Donnees geo de reference (OSM + API cadastre IGN), capturees le 19/04/2026 */
 const GROTTEAUX_REALISTIC_GEO = {
@@ -3537,7 +3584,7 @@ function App() {
     const c=GROTTEAUX_REALISTIC_GEO;
     const parcelColors=["rgba(139,115,85,0.12)","rgba(184,160,112,0.11)","rgba(107,142,107,0.11)","rgba(123,107,142,0.11)","rgba(142,107,107,0.11)"];
     const parcelEls = Object.entries(c.parcelBboxes).map(([pid,b],i)=>
-      geoBboxToEl(b,"zone",`Parcelle ${pid}`,parcelColors[i%parcelColors.length])
+      geoBboxToEl(b,"parcelle",`Parcelle ${pid}`,parcelColors[i%parcelColors.length])
     );
     const scaleEl=(el,sx,sy=sx)=>({...el,w:Math.round(el.w*sx),h:Math.round(el.h*sy)});
     const chateauEl = scaleEl(geoBboxToEl(c.chateauBbox,"chateau","Château des Grotteaux","#A89070",-16),1.9,1.8);
@@ -4361,11 +4408,10 @@ function App() {
             {/* Transformed layer */}
             <div style={{position:"absolute",left:0,top:0,transform:`translate(${panX}px,${panY}px) scale(${zoom})`,transformOrigin:"0 0",width:4000,height:3000}}>
 
-              {curVenue.map(el=>{
-                const isR=el.type==="arbre"||el.type==="bassin"||el.type==="menhir";
-                return <VEl key={el.id} el={el} isR={isR} sel={selEl===el.id} canDrag={canEdit&&tab==="plan"} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
-                  onSelect={()=>{setSelEl(el.id);if(tab==="plan")setSideSection("props");}} onDrag={(x,y)=>dragVE(el.id,x,y)}/>;
-              })}
+              {curVenue.map(el=>(
+                <VEl key={el.id} el={el} sel={selEl===el.id} canDrag={canEdit&&tab==="plan"} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
+                  onSelect={()=>{setSelEl(el.id);if(tab==="plan")setSideSection("props");}} onDrag={(x,y)=>dragVE(el.id,x,y)}/>
+              ))}
 
               {tab!=="guests"&&(
                 <svg style={{position:"absolute",top:0,left:0,width:4000,height:3000,pointerEvents:"none"}}>
@@ -4879,7 +4925,7 @@ function App() {
 }
 
 /* ═══ Draggable Venue Element ═══ */
-function VEl({el,isR,sel,canDrag,onSelect,onDrag,zoom,panX,panY,containerRef}) {
+function VEl({el,sel,canDrag,onSelect,onDrag,zoom,panX,panY,containerRef}) {
   const ref=useRef(null);
   const dr=useRef(false);
   const off=useRef({x:0,y:0});
@@ -4902,23 +4948,133 @@ function VEl({el,isR,sel,canDrag,onSelect,onDrag,zoom,panX,panY,containerRef}) {
   };
   const up=e=>{dr.current=false;ref.current?.releasePointerCapture(e.pointerId);};
 
-  const isTr=el.type==="label"||el.type==="zone";const isZ=el.type==="zone";
+  const meta = VENUE_META[el.type] || {z:5, kind:"box"};
+  const kind = meta.kind;
+  const w=el.w, h=el.h, col=el.color||"#D4C5B0";
+  const isZone = kind==="zone";
+  const isParcel = kind==="parcelle";
+  const isLabel = kind==="label";
+  const isCircle = kind==="tree"||kind==="waterRound"||kind==="menhir";
+  const isCapsule = kind==="path"||kind==="river"||kind==="bench"||kind==="hedge"||kind==="wall"||kind==="gate";
+
+  /* Fond selon le type */
+  let bg = col;
+  if(kind==="tree")        bg = `radial-gradient(circle at 35% 30%, #A8C988 0%, ${col} 55%, #3E5E2E 100%)`;
+  else if(kind==="river")  bg = `linear-gradient(180deg, #A8D6E2 0%, ${col} 50%, #6CA0B4 100%)`;
+  else if(kind==="pool")   bg = `radial-gradient(ellipse at 50% 35%, #C5E8F2 0%, ${col} 60%, #5A9CB0 100%)`;
+  else if(kind==="waterRound") bg = `radial-gradient(circle at 40% 35%, #C5E8F2 0%, ${col} 70%, #5A9CB0 100%)`;
+  else if(kind==="path"||kind==="aisle") bg = `linear-gradient(180deg, #ECDFC2 0%, ${col} 50%, #C0AE88 100%)`;
+  else if(kind==="bridge") bg = `linear-gradient(180deg, #BBA078 0%, ${col} 50%, #7E6342 100%)`;
+  else if(kind==="building") bg = `linear-gradient(180deg, #D2C2A4 0%, ${col} 40%, #806A4C 100%)`;
+  else if(kind==="grass")  bg = `repeating-radial-gradient(circle at 30% 30%, rgba(255,255,255,0.07) 0 2px, transparent 2px 7px), ${col}`;
+  else if(kind==="hedge")  bg = `linear-gradient(180deg, #78A064 0%, #3E5E2E 100%)`;
+  else if(kind==="wall")   bg = `linear-gradient(180deg, #B0A090 0%, ${col} 50%, #5C5040 100%)`;
+  else if(kind==="flowers") bg = `repeating-radial-gradient(circle at 25% 30%, #E8A8C0 0 3px, transparent 3px 9px), repeating-radial-gradient(circle at 70% 60%, #C8A8E0 0 3px, transparent 3px 10px), ${col}`;
+  else if(kind==="parking") bg = `repeating-linear-gradient(90deg, rgba(255,255,255,0.18) 0 2px, transparent 2px 28px), ${col}`;
+  else if(kind==="tennis") bg = `linear-gradient(180deg, ${col} 0%, #A85838 100%)`;
+  else if(kind==="dance")  bg = `repeating-linear-gradient(45deg, rgba(0,0,0,0.06) 0 8px, transparent 8px 16px), ${col}`;
+  else if(kind==="stage")  bg = `linear-gradient(180deg, #D8C8A8 0%, ${col} 60%, #6E5A3E 100%)`;
+  else if(kind==="bar")    bg = `linear-gradient(180deg, #8B6A4F 0%, ${col} 60%, #4A3422 100%)`;
+  else if(kind==="tent")   bg = `linear-gradient(180deg, #FFFCF7 0%, ${col} 50%, #C8BBA8 100%)`;
+  else if(kind==="bench")  bg = `linear-gradient(180deg, #C09870 0%, ${col} 50%, #6E5238 100%)`;
+  else if(kind==="chair")  bg = `linear-gradient(180deg, #E0C496 0%, ${col} 50%, #8E7050 100%)`;
+  else if(kind==="altar")  bg = `linear-gradient(180deg, #FFFFFF 0%, ${col} 100%)`;
+  else if(kind==="menhir") bg = `radial-gradient(circle at 40% 30%, #C8C8C8 0%, ${col} 60%, #4A4A4A 100%)`;
+  else if(kind==="arch")   bg = `linear-gradient(180deg, ${col} 0%, #8E7050 100%)`;
+  else if(isParcel)        bg = col;
+  else if(isLabel)         bg = "transparent";
+
+  const radius =
+    isCircle ? "50%" :
+    isCapsule ? 999 :
+    kind==="arch" ? "50% 50% 4px 4px" :
+    kind==="chair" ? 4 :
+    kind==="building"||kind==="tent" ? 4 :
+    6;
+
+  const border =
+    sel ? "2px solid #8B7355" :
+    isZone ? "2px dashed #C8B8A0" :
+    isParcel ? "1px dashed rgba(139,115,85,0.35)" :
+    "2px solid transparent";
+
+  const shadow =
+    sel ? "0 0 0 3px rgba(139,115,85,0.2)" :
+    isLabel||isZone||isParcel ? "none" :
+    kind==="building" ? "0 2px 6px rgba(60,40,20,0.22)" :
+    kind==="tree" ? "0 1px 3px rgba(40,60,30,0.35)" :
+    kind==="bench"||kind==="chair"||kind==="altar" ? "0 1px 2px rgba(60,40,20,0.25)" :
+    "0 1px 4px rgba(0,0,0,0.1)";
+
+  const opacity = isZone?0.6 : isParcel?0.55 : 1;
+  const zIndex = sel ? 100 : (meta.z||0)+1;
+
+  const textColor =
+    kind==="bar"||kind==="wall"||kind==="hedge"||kind==="dance" ? "#F5EDE3" :
+    kind==="building"||kind==="stage" ? "#2E2418" :
+    "#5A4A3A";
+
+  /* Contenu interne (toit, motifs de chaises, etc.) */
+  const inner = [];
+  if(kind==="building"){
+    const roofH = Math.max(6, Math.min(h*0.22, 14));
+    inner.push(<div key="roof" style={{position:"absolute",left:0,right:0,top:0,height:roofH,background:meta.roof||"#7A5C42",borderRadius:"4px 4px 0 0",opacity:0.9}}/>);
+  }
+  if(kind==="chair"){
+    inner.push(<div key="back" style={{position:"absolute",left:"18%",right:"18%",top:0,height:"32%",background:"rgba(0,0,0,0.32)",borderRadius:"3px 3px 0 0"}}/>);
+  }
+  if(kind==="chairRow"){
+    const n = Math.max(3, Math.min(40, Math.round(w/14)));
+    const seats=[];
+    for(let i=0;i<n;i++){
+      seats.push(<div key={i} style={{flex:"1 1 0",height:"100%",background:`linear-gradient(180deg, #E0C496 0%, ${col} 60%, #8E7050 100%)`,borderRadius:3,boxShadow:"inset 0 2px 0 rgba(0,0,0,0.25)",margin:"0 1px"}}/>);
+    }
+    inner.push(<div key="row" style={{position:"absolute",inset:1,display:"flex",alignItems:"stretch"}}>{seats}</div>);
+  }
+  if(kind==="bench"){
+    inner.push(<div key="bk" style={{position:"absolute",left:0,right:0,top:0,height:"35%",background:"rgba(0,0,0,0.28)",borderRadius:"999px 999px 0 0"}}/>);
+  }
+  if(kind==="altar"){
+    inner.push(<div key="cross" style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",color:"#8B7355",fontSize:Math.min(h*0.7,18),lineHeight:1}}>✝</div>);
+  }
+  if(kind==="tent"){
+    inner.push(<div key="ridge" style={{position:"absolute",left:"10%",right:"10%",top:"50%",height:1,background:"rgba(0,0,0,0.2)"}}/>);
+    inner.push(<div key="d1" style={{position:"absolute",left:"8%",top:"50%",bottom:"8%",width:1,background:"rgba(0,0,0,0.15)",transform:"rotate(-12deg)",transformOrigin:"top"}}/>);
+    inner.push(<div key="d2" style={{position:"absolute",right:"8%",top:"50%",bottom:"8%",width:1,background:"rgba(0,0,0,0.15)",transform:"rotate(12deg)",transformOrigin:"top"}}/>);
+  }
+  if(kind==="tennis"){
+    inner.push(<div key="ln" style={{position:"absolute",left:"6%",right:"6%",top:"50%",height:1,background:"rgba(255,255,255,0.7)"}}/>);
+    inner.push(<div key="bd" style={{position:"absolute",inset:"6%",border:"1px solid rgba(255,255,255,0.6)",borderRadius:2}}/>);
+  }
+  if(kind==="tree"){
+    inner.push(<div key="trunk" style={{position:"absolute",left:"45%",right:"45%",top:"45%",bottom:"45%",background:"rgba(80,55,30,0.45)",borderRadius:"50%"}}/>);
+  }
+  if(kind==="aisle"){
+    inner.push(<div key="r1" style={{position:"absolute",left:0,right:0,top:0,height:1,background:"rgba(0,0,0,0.08)"}}/>);
+    inner.push(<div key="r2" style={{position:"absolute",left:0,right:0,bottom:0,height:1,background:"rgba(0,0,0,0.08)"}}/>);
+  }
+
+  const labelHidden = kind==="chair"||kind==="chairRow"||(kind==="tree"&&!el.label)||kind==="parcelle";
 
   return(
     <div data-interactive="1" ref={ref} onClick={e=>{e.stopPropagation();onSelect();}} onPointerDown={down} onPointerMove={move} onPointerUp={up} style={{
-      position:"absolute",left:el.x-el.w/2,top:el.y-el.h/2,width:el.w,height:el.h,
+      position:"absolute",left:el.x-w/2,top:el.y-h/2,width:w,height:h,
       cursor:canDrag?"move":"default",
-      border:sel?"2px solid #8B7355":isZ?"2px dashed #C8B8A0":"2px solid transparent",
-      borderRadius:isR?"50%":el.type==="arche"?"50% 50% 4px 4px":6,
-      background:el.color||"#D4C5B0",
+      border,
+      borderRadius:radius,
+      background:bg,
       display:"flex",alignItems:"center",justifyContent:"center",
-      fontFamily:"'Outfit',sans-serif",fontSize:isZ?13:11,fontWeight:500,
-      color:el.type==="bar"||el.type==="mur_ext"?"#F5EDE3":"#5A4A3A",
+      fontFamily:"'Outfit',sans-serif",fontSize:isZone?13:isParcel?10:11,fontWeight:500,
+      color:textColor,
       userSelect:"none",whiteSpace:"pre-line",textAlign:"center",padding:4,lineHeight:1.2,
-      boxShadow:sel?"0 0 0 3px rgba(139,115,85,0.2)":isTr?"none":"0 1px 4px rgba(0,0,0,0.1)",
+      boxShadow:shadow,
       transform:`rotate(${el.rotation||0}deg)`,transition:"box-shadow 0.15s",
-      zIndex:isZ?0:sel?10:1,opacity:isZ?0.6:1,
-    }}>{el.label}</div>
+      zIndex,opacity,
+      overflow:"hidden",
+    }}>
+      {inner}
+      {!labelHidden && <span style={{position:"relative",zIndex:1}}>{el.label}</span>}
+    </div>
   );
 }
 
