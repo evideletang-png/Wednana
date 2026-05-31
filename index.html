@@ -2568,6 +2568,7 @@ function App() {
   const [prestataires,setPrestataires] = useState(s?.prestataires||[]);
   const [editPrestaId,setEditPrestaId] = useState(null);
   const [mapLayer,setMapLayer] = useState({visible:false,opacity:0.55,source:"satellite",tileZoom:18});
+  const [polyDraft,setPolyDraft] = useState(null); /* {type,label,color,points:[{x,y}],cursor} */
   const [newPrestaName,setNewPrestaName] = useState("");
   const [newPrestaCat,setNewPrestaCat] = useState("traiteur");
   const [compareVersionA,setCompareVersionA] = useState("");
@@ -3644,6 +3645,71 @@ function App() {
     setTab("plan");
     setTimeout(()=>fitContent(),0);
   };
+  /* ── Outil polygone ── */
+  const startPolyDraft=(preset)=>{
+    if(!canEdit)return;
+    setPolyDraft({type:preset.type,label:preset.label||"",color:preset.color,points:[],cursor:null});
+    setSelEl(null);
+  };
+  const cancelPolyDraft=()=>setPolyDraft(null);
+  const finishPolyDraft=()=>{
+    setPolyDraft(d=>{
+      if(!d)return null;
+      if(d.points.length<3)return null;
+      const pts=d.points;
+      const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
+      const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+      const el={
+        id:uid(),shape:"poly",type:d.type,label:d.label||"",color:d.color,
+        points:pts.map(p=>({x:p.x,y:p.y})),
+        x:(minX+maxX)/2,y:(minY+maxY)/2,w:Math.max(20,maxX-minX),h:Math.max(20,maxY-minY),
+        rotation:0,
+      };
+      setVenueEls(v=>({...v,[activeZone]:[...(v[activeZone]||[]),el]}));
+      return null;
+    });
+  };
+  const undoPolyVertex=()=>setPolyDraft(d=>d?{...d,points:d.points.slice(0,-1)}:d);
+  const addPolyVertex=(x,y)=>setPolyDraft(d=>d?{...d,points:[...d.points,{x,y}]}:d);
+  const setPolyCursor=(x,y)=>setPolyDraft(d=>d&&d.points.length?{...d,cursor:{x,y}}:d);
+
+  useEffect(()=>{
+    const onKey=e=>{
+      if(!polyDraft)return;
+      if(e.key==="Escape"){e.preventDefault();cancelPolyDraft();}
+      else if(e.key==="Enter"){e.preventDefault();finishPolyDraft();}
+      else if(e.key==="Backspace"){e.preventDefault();undoPolyVertex();}
+    };
+    window.addEventListener("keydown",onKey);
+    return ()=>window.removeEventListener("keydown",onKey);
+  },[polyDraft,activeZone]);
+
+  const updatePolyEl=(id,patch)=>setVenueEls(v=>({...v,[activeZone]:(v[activeZone]||[]).map(el=>{
+    if(el.id!==id)return el;
+    const next={...el,...patch};
+    if(patch.points){
+      const xs=patch.points.map(p=>p.x),ys=patch.points.map(p=>p.y);
+      const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+      next.x=(minX+maxX)/2;next.y=(minY+maxY)/2;next.w=Math.max(20,maxX-minX);next.h=Math.max(20,maxY-minY);
+    }
+    return next;
+  })}));
+
+  const POLY_PRESETS=[
+    {type:"batiment",label:"Bâtiment",color:"#B89E7A",icon:"🏠"},
+    {type:"chateau",label:"Château",color:"#A89070",icon:"🏰"},
+    {type:"orangerie",label:"Orangerie",color:"#B8A070",icon:"🏛"},
+    {type:"chapelle",label:"Chapelle",color:"#B0A090",icon:"⛪"},
+    {type:"allee",label:"Allée / Chemin",color:"#D2C3A5",icon:"〰"},
+    {type:"pelouse",label:"Pelouse",color:"#A8C898",icon:"🟩"},
+    {type:"riviere",label:"Eau / Cours",color:"#88B8C8",icon:"🌊"},
+    {type:"piscine",label:"Piscine / Bassin",color:"#88C8D8",icon:"🏊"},
+    {type:"haie",label:"Haie",color:"#5A7A4A",icon:"🌿"},
+    {type:"parterre",label:"Parterre",color:"#D8A8B8",icon:"🌸"},
+    {type:"parking",label:"Parking",color:"#B8B8B0",icon:"🅿"},
+    {type:"zone",label:"Zone libre",color:"rgba(139,115,85,0.12)",icon:"⬜"},
+  ];
+
   const clearVenueZone=()=>{
     if(!curVenue.length) return;
     if(!confirm("Vider tous les éléments de la zone ? (le calque carte reste affiché)")) return;
@@ -4285,6 +4351,21 @@ function App() {
                     Vider la zone
                   </button>
                   <div style={{fontSize:10,color:"#A09080",marginBottom:6,lineHeight:1.35}}>Référence: parcelles BX0024/25/28/30/0199 (cadastre IGN) + tracés OSM (Cosson, rue des Grotteaux).</div>
+                  <div style={{border:"1px solid #E8DDD0",borderRadius:9,padding:10,marginBottom:12,marginTop:10,background:"#FAF6F0"}}>
+                    <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:1.5,color:"#A09080",marginBottom:6}}>Tracer un polygone</div>
+                    <div style={{fontSize:10,color:"#8A7A6A",marginBottom:8,lineHeight:1.35}}>Pour les bâtiments ou chemins non rectangulaires : suis les contours sur le calque carte.</div>
+                    {polyDraft ? (
+                      <div style={{padding:"6px 8px",background:"#EDE5D8",borderRadius:6,fontSize:11,color:"#5A4A3A",lineHeight:1.4}}>
+                        Tracé <b>{polyDraft.label}</b> en cours — clique sur le plan pour ajouter des points. Entrée pour terminer, Échap pour annuler.
+                      </div>
+                    ) : (
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}>
+                        {POLY_PRESETS.map(p=>(
+                          <button key={p.type+"-"+p.label} onClick={()=>startPolyDraft(p)} style={{padding:"6px 6px",border:"1px solid #D4C5B0",borderRadius:6,background:"#FFFCF7",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:10,color:"#5A4A3A",display:"flex",alignItems:"center",gap:4,textAlign:"left",lineHeight:1.2}}><span style={{fontSize:13}}>{p.icon}</span><span>{p.label}</span></button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   {VENUE_CATALOG.map(cat=>(<div key={cat.cat}><div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:1.5,color:"#A09080",margin:"14px 0 8px"}}>{cat.cat}</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>{cat.items.map(it=>(<button key={it.type} onClick={()=>addVenueEl(it)} style={{padding:"8px 6px",border:"1px solid #E8DDD0",borderRadius:8,background:"#FAF6F0",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:11,color:"#5A4A3A",display:"flex",alignItems:"center",gap:5,textAlign:"left",lineHeight:1.2}}><span style={{fontSize:16}}>{it.icon}</span><span>{it.label}</span></button>))}</div></div>))}
                 </div>)}
                 {sideSection==="placed"&&(<div style={{padding:14}}><div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:1.5,color:"#A09080",marginBottom:10}}>Éléments ({curVenue.length})</div>{curVenue.map(el=>(<div key={el.id} onClick={()=>{setSelEl(el.id);setSideSection("props");}} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",marginBottom:3,borderRadius:6,cursor:"pointer",background:selEl===el.id?"#EDE5D8":"transparent"}}><span style={{fontSize:12}}>{el.label||el.type}</span><button onClick={e=>{e.stopPropagation();removeVE(el.id);}} style={{border:"none",background:"none",cursor:"pointer",color:"#C07050",fontSize:15,padding:0}}>×</button></div>))}</div>)}
@@ -4474,10 +4555,26 @@ function App() {
                 </div>
               )}
 
-              {curVenue.map(el=>(
-                <VEl key={el.id} el={el} sel={selEl===el.id} canDrag={canEdit&&tab==="plan"} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
-                  onSelect={()=>{setSelEl(el.id);if(tab==="plan")setSideSection("props");}} onDrag={(x,y)=>dragVE(el.id,x,y)}/>
-              ))}
+              {curVenue.map(el=>el.shape==="poly"
+                ? <PolyEl key={el.id} el={el} sel={selEl===el.id} canDrag={canEdit&&tab==="plan"&&!polyDraft} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
+                    onSelect={()=>{setSelEl(el.id);if(tab==="plan")setSideSection("props");}} onUpdate={patch=>updatePolyEl(el.id,patch)}/>
+                : <VEl key={el.id} el={el} sel={selEl===el.id} canDrag={canEdit&&tab==="plan"&&!polyDraft} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
+                    onSelect={()=>{setSelEl(el.id);if(tab==="plan")setSideSection("props");}} onDrag={(x,y)=>dragVE(el.id,x,y)}/>
+              )}
+
+              {polyDraft&&(
+                <svg style={{position:"absolute",left:0,top:0,width:4000,height:3000,pointerEvents:"none",zIndex:99}}>
+                  {polyDraft.points.length>=2&&(
+                    <polygon points={polyDraft.points.map(p=>`${p.x},${p.y}`).join(" ")} fill={polyDraft.color} fillOpacity="0.35" stroke="#8B7355" strokeWidth={2/zoom} strokeDasharray={`${6/zoom} ${4/zoom}`}/>
+                  )}
+                  {polyDraft.points.length>0&&polyDraft.cursor&&(
+                    <line x1={polyDraft.points[polyDraft.points.length-1].x} y1={polyDraft.points[polyDraft.points.length-1].y} x2={polyDraft.cursor.x} y2={polyDraft.cursor.y} stroke="#8B7355" strokeWidth={2/zoom} strokeDasharray={`${4/zoom} ${3/zoom}`}/>
+                  )}
+                  {polyDraft.points.map((p,i)=>(
+                    <circle key={i} cx={p.x} cy={p.y} r={5/zoom} fill="#FFFCF7" stroke="#8B7355" strokeWidth={2/zoom}/>
+                  ))}
+                </svg>
+              )}
 
               {tab!=="guests"&&(
                 <svg style={{position:"absolute",top:0,left:0,width:4000,height:3000,pointerEvents:"none"}}>
@@ -4488,6 +4585,27 @@ function App() {
                 </svg>
               )}
             </div>
+
+            {polyDraft&&(
+              <div data-interactive="1" style={{position:"absolute",inset:0,cursor:"crosshair",zIndex:30}}
+                onPointerDown={e=>{
+                  if(e.button!==0)return;
+                  e.stopPropagation();e.preventDefault();
+                  const p=s2c(e.clientX,e.clientY);
+                  addPolyVertex(p.x,p.y);
+                }}
+                onPointerMove={e=>{const p=s2c(e.clientX,e.clientY);setPolyCursor(p.x,p.y);}}
+                onDoubleClick={e=>{e.stopPropagation();e.preventDefault();finishPolyDraft();}}
+                onContextMenu={e=>{e.preventDefault();finishPolyDraft();}}/>
+            )}
+            {polyDraft&&(
+              <div data-no-canvas-zoom="1" style={{position:"absolute",left:"50%",bottom:18,transform:"translateX(-50%)",zIndex:40,background:"#FFFCF7",border:"1px solid #D4C5B0",borderRadius:10,padding:"8px 14px",boxShadow:"0 4px 14px rgba(0,0,0,0.12)",display:"flex",alignItems:"center",gap:10,fontFamily:"'Outfit',sans-serif",fontSize:12,color:"#5A4A3A"}}>
+                <span><b>Tracé : {polyDraft.label}</b> — {polyDraft.points.length} point{polyDraft.points.length>1?"s":""}</span>
+                <button onClick={undoPolyVertex} disabled={!polyDraft.points.length} style={{padding:"5px 10px",border:"1px solid #D4C5B0",borderRadius:6,background:"#FAF6F0",cursor:polyDraft.points.length?"pointer":"not-allowed",fontFamily:"'Outfit',sans-serif",fontSize:11,color:"#5A4A3A",opacity:polyDraft.points.length?1:0.4}}>↶ point</button>
+                <button onClick={finishPolyDraft} disabled={polyDraft.points.length<3} style={{padding:"5px 12px",border:"1px solid #8B7355",borderRadius:6,background:polyDraft.points.length>=3?"#8B7355":"#D4C5B0",color:"#FFFCF7",cursor:polyDraft.points.length>=3?"pointer":"not-allowed",fontFamily:"'Outfit',sans-serif",fontSize:11}}>Terminer (Entrée)</button>
+                <button onClick={cancelPolyDraft} style={{padding:"5px 10px",border:"1px solid #D4C5B0",borderRadius:6,background:"#FAF6F0",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:11,color:"#8A5A4A"}}>Annuler (Échap)</button>
+              </div>
+            )}
 
             {tab==="seating"&&hoverSeat&&(
               <div style={{
@@ -5141,6 +5259,118 @@ function VEl({el,sel,canDrag,onSelect,onDrag,zoom,panX,panY,containerRef}) {
       {inner}
       {!labelHidden && <span style={{position:"relative",zIndex:1}}>{el.label}</span>}
     </div>
+  );
+}
+
+/* ═══ Polygone tracé ═══ */
+function PolyEl({el,sel,canDrag,onSelect,onUpdate,zoom,panX,panY,containerRef}) {
+  const drag=useRef(null);
+  const pts=el.points||[];
+  if(pts.length<3) return null;
+  const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
+  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+  const pad=10;
+  const w=maxX-minX, h=maxY-minY;
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  const meta=VENUE_META[el.type]||{z:5,kind:"box"};
+  const kind=meta.kind;
+  const col=el.color||"#A89070";
+  let fill=col, stroke="rgba(0,0,0,0.18)", strokeW=1, fillOp=1, gradId=null;
+  if(kind==="building"){ stroke=meta.roof||"#7A5C42"; strokeW=2; }
+  else if(kind==="path"||kind==="aisle"){ stroke="#9E8A66"; strokeW=1; }
+  else if(kind==="river"||kind==="pool"||kind==="waterRound"){ stroke="#5A9CB0"; strokeW=1; }
+  else if(kind==="grass"){ stroke="#7A9870"; strokeW=1; fillOp=0.85; }
+  else if(kind==="hedge"){ fill="#5A7A4A"; stroke="#3E5E2E"; strokeW=2; }
+  else if(kind==="flowers"){ stroke="#A87898"; strokeW=1; }
+  else if(kind==="parking"){ stroke="#8A8A82"; strokeW=1; }
+  else if(kind==="zone"){ stroke="#C8B8A0"; strokeW=2; fillOp=0.55; }
+  const polyStr=pts.map(p=>`${p.x-minX+pad},${p.y-minY+pad}`).join(" ");
+  const zi = sel ? 200 : (meta.z||0)*10+2;
+  const fontSize=Math.max(10,Math.min(16,Math.min(w,h)/8));
+  const onDown=e=>{
+    if(e.target.dataset?.vertex)return;
+    e.stopPropagation();onSelect();
+    if(!canDrag)return;
+    const r=containerRef.current?.getBoundingClientRect()||{left:0,top:0};
+    drag.current={mode:"move",sx:e.clientX,sy:e.clientY,orig:pts.map(p=>({...p}))};
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onMove=e=>{
+    if(!drag.current)return;
+    const dx=(e.clientX-drag.current.sx)/zoom;
+    const dy=(e.clientY-drag.current.sy)/zoom;
+    if(drag.current.mode==="move"){
+      onUpdate({points:drag.current.orig.map(p=>({x:p.x+dx,y:p.y+dy}))});
+    }else if(drag.current.mode==="vertex"){
+      const idx=drag.current.idx;
+      onUpdate({points:drag.current.orig.map((p,i)=>i===idx?{x:p.x+dx,y:p.y+dy}:p)});
+    }
+  };
+  const onUp=e=>{drag.current=null;e.currentTarget?.releasePointerCapture?.(e.pointerId);};
+  const onVertexDown=(e,i)=>{
+    e.stopPropagation();
+    if(!canDrag)return;
+    onSelect();
+    drag.current={mode:"vertex",idx:i,sx:e.clientX,sy:e.clientY,orig:pts.map(p=>({...p}))};
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onVertexDoubleClick=(e,i)=>{
+    e.stopPropagation();
+    if(!canDrag||pts.length<=3)return;
+    onUpdate({points:pts.filter((_,k)=>k!==i)});
+  };
+  const onEdgeDoubleClick=e=>{
+    if(!canDrag)return;
+    const r=e.currentTarget.getBoundingClientRect();
+    const lx=(e.clientX-r.left)/zoom + minX - pad;
+    const ly=(e.clientY-r.top)/zoom + minY - pad;
+    let bestI=0,bestD=Infinity;
+    for(let i=0;i<pts.length;i++){
+      const a=pts[i], b=pts[(i+1)%pts.length];
+      const dx=b.x-a.x, dy=b.y-a.y;
+      const t=Math.max(0,Math.min(1,((lx-a.x)*dx+(ly-a.y)*dy)/(dx*dx+dy*dy||1)));
+      const px=a.x+t*dx, py=a.y+t*dy;
+      const d=Math.hypot(lx-px,ly-py);
+      if(d<bestD){bestD=d;bestI=i;}
+    }
+    const np=[...pts];
+    np.splice(bestI+1,0,{x:lx,y:ly});
+    onUpdate({points:np});
+  };
+  const hr=Math.max(3,6/zoom);
+  return (
+    <svg data-interactive="1"
+      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp}
+      onDoubleClick={onEdgeDoubleClick}
+      style={{position:"absolute",left:minX-pad,top:minY-pad,width:w+pad*2,height:h+pad*2,overflow:"visible",zIndex:zi,cursor:canDrag?"move":"default"}}>
+      {kind==="building"&&(
+        <defs><linearGradient id={`gb-${el.id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#D2C2A4"/><stop offset="40%" stopColor={col}/><stop offset="100%" stopColor="#806A4C"/>
+        </linearGradient></defs>
+      )}
+      {(kind==="river"||kind==="pool"||kind==="waterRound")&&(
+        <defs><linearGradient id={`gw-${el.id}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#A8D6E2"/><stop offset="60%" stopColor={col}/><stop offset="100%" stopColor="#5A9CB0"/>
+        </linearGradient></defs>
+      )}
+      <polygon points={polyStr}
+        fill={kind==="building"?`url(#gb-${el.id})`:(kind==="river"||kind==="pool"||kind==="waterRound")?`url(#gw-${el.id})`:fill}
+        fillOpacity={fillOp}
+        stroke={sel?"#8B7355":stroke}
+        strokeWidth={(sel?3:strokeW)/Math.max(0.5,zoom)*1}
+        strokeLinejoin="round"
+        style={{filter: kind==="building"?"drop-shadow(0 2px 4px rgba(0,0,0,0.18))":undefined}}/>
+      {kind==="building"&&pts.length>=3&&(()=>{
+        let topI=0;for(let i=1;i<pts.length;i++)if(pts[i].y<pts[topI].y)topI=i;
+        const a=pts[(topI-1+pts.length)%pts.length], b=pts[topI], c=pts[(topI+1)%pts.length];
+        return <polyline points={`${a.x-minX+pad},${a.y-minY+pad} ${b.x-minX+pad},${b.y-minY+pad} ${c.x-minX+pad},${c.y-minY+pad}`} fill="none" stroke={meta.roof||"#7A5C42"} strokeWidth={3/Math.max(0.5,zoom)} strokeLinejoin="round" strokeLinecap="round" opacity="0.85"/>;
+      })()}
+      {el.label && <text x={cx-minX+pad} y={cy-minY+pad} textAnchor="middle" dominantBaseline="middle" fontFamily="Outfit, sans-serif" fontSize={fontSize} fontWeight="500" fill={kind==="building"||kind==="hedge"?"#2E2418":"#5A4A3A"} style={{pointerEvents:"none",userSelect:"none"}}>{el.label}</text>}
+      {sel&&pts.map((p,i)=>(
+        <circle key={i} data-vertex="1" cx={p.x-minX+pad} cy={p.y-minY+pad} r={hr} fill="#FFFCF7" stroke="#8B7355" strokeWidth={2/Math.max(0.5,zoom)} style={{cursor:"crosshair"}}
+          onPointerDown={e=>onVertexDown(e,i)} onDoubleClick={e=>onVertexDoubleClick(e,i)}/>
+      ))}
+    </svg>
   );
 }
 
