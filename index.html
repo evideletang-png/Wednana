@@ -2567,6 +2567,7 @@ function App() {
   const [newPlanVersionStatus,setNewPlanVersionStatus] = useState("draft");
   const [prestataires,setPrestataires] = useState(s?.prestataires||[]);
   const [editPrestaId,setEditPrestaId] = useState(null);
+  const [mapLayer,setMapLayer] = useState({visible:false,opacity:0.55,source:"satellite",tileZoom:18});
   const [newPrestaName,setNewPrestaName] = useState("");
   const [newPrestaCat,setNewPrestaCat] = useState("traiteur");
   const [compareVersionA,setCompareVersionA] = useState("");
@@ -3643,6 +3644,37 @@ function App() {
     setTab("plan");
     setTimeout(()=>fitContent(),0);
   };
+  const clearVenueZone=()=>{
+    if(!curVenue.length) return;
+    if(!confirm("Vider tous les éléments de la zone ? (le calque carte reste affiché)")) return;
+    setVenueEls({...venueEls,[activeZone]:[]});
+    setSelEl(null);
+  };
+  /* Tuiles du calque carte (Web Mercator → coords canvas via geoToCanvas) */
+  const mapTiles = (()=>{
+    if(!mapLayer.visible) return [];
+    const z = mapLayer.tileZoom;
+    const n = Math.pow(2,z);
+    const lon2tx = lon => ((lon+180)/360)*n;
+    const lat2ty = lat => (1 - Math.log(Math.tan(lat*Math.PI/180)+1/Math.cos(lat*Math.PI/180))/Math.PI)/2 * n;
+    const tx2lon = tx => tx/n*360 - 180;
+    const ty2lat = ty => Math.atan(Math.sinh(Math.PI*(1 - 2*ty/n)))*180/Math.PI;
+    const minLon=1.4185, maxLon=1.4275, minLat=47.5820, maxLat=47.5878;
+    const tx0=Math.floor(lon2tx(minLon)), tx1=Math.floor(lon2tx(maxLon));
+    const ty0=Math.floor(lat2ty(maxLat)), ty1=Math.floor(lat2ty(minLat));
+    const url = (tx,ty)=> mapLayer.source==="satellite"
+      ? `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${ty}/${tx}`
+      : mapLayer.source==="plan"
+        ? `https://tile.openstreetmap.org/${z}/${tx}/${ty}.png`
+        : `https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/${z}/${ty}/${tx}`;
+    const tiles=[];
+    for(let tx=tx0; tx<=tx1; tx++) for(let ty=ty0; ty<=ty1; ty++){
+      const pNW = geoToCanvas(tx2lon(tx), ty2lat(ty));
+      const pSE = geoToCanvas(tx2lon(tx+1), ty2lat(ty+1));
+      tiles.push({k:`${z}_${tx}_${ty}`,u:url(tx,ty),l:pNW.x,t:pNW.y,w:pSE.x-pNW.x,h:pSE.y-pNW.y});
+    }
+    return tiles;
+  })();
 
   /* ─ Venue ─ */
   const addVenueEl=item=>{if(!canEdit)return;const c=viewCenter();setVenueEls({...venueEls,[activeZone]:[...curVenue,{id:uid(),...item,x:c.x,y:c.y,rotation:0}]});};
@@ -4223,8 +4255,34 @@ function App() {
                   ))}
                 </div>
                 {sideSection==="elements"&&(<div style={{padding:14}}>
-                  <button onClick={loadRealisticBase} style={{width:"100%",padding:"10px 12px",marginBottom:12,border:"1px solid #D4C5B0",borderRadius:9,background:"#F5EDE3",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:12,color:"#5A4A3A",textAlign:"left"}}>
+                  <div style={{border:"1px solid #E8DDD0",borderRadius:9,padding:10,marginBottom:12,background:"#FFFCF7"}}>
+                    <div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:1.5,color:"#A09080",marginBottom:8}}>Calque carte (référence)</div>
+                    <label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:"#5A4A3A",cursor:"pointer",marginBottom:8}}>
+                      <input type="checkbox" checked={mapLayer.visible} onChange={e=>setMapLayer({...mapLayer,visible:e.target.checked})}/>
+                      Afficher sous les éléments
+                    </label>
+                    {mapLayer.visible&&(<>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:8}}>
+                        {[["satellite","Sat."],["plan","Plan"],["topo","Topo"]].map(([v,l])=>(
+                          <button key={v} onClick={()=>setMapLayer({...mapLayer,source:v})} style={{padding:"5px 0",border:`1px solid ${mapLayer.source===v?"#8B7355":"#D4C5B0"}`,borderRadius:6,background:mapLayer.source===v?"#EDE5D8":"#FAF6F0",fontFamily:"'Outfit',sans-serif",fontSize:10,color:"#5A4A3A",cursor:"pointer"}}>{l}</button>
+                        ))}
+                      </div>
+                      <label style={{fontSize:10,color:"#8A7A6A",display:"block",marginBottom:2}}>Opacité {Math.round(mapLayer.opacity*100)}%</label>
+                      <input type="range" min="0.1" max="1" step="0.05" value={mapLayer.opacity} onChange={e=>setMapLayer({...mapLayer,opacity:+e.target.value})} style={{width:"100%",marginBottom:6}}/>
+                      <label style={{fontSize:10,color:"#8A7A6A",display:"block",marginBottom:2}}>Zoom des tuiles</label>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:4,marginBottom:4}}>
+                        {[17,18,19,20].map(zv=>(
+                          <button key={zv} onClick={()=>setMapLayer({...mapLayer,tileZoom:zv})} style={{padding:"4px 0",border:`1px solid ${mapLayer.tileZoom===zv?"#8B7355":"#D4C5B0"}`,borderRadius:6,background:mapLayer.tileZoom===zv?"#EDE5D8":"#FAF6F0",fontFamily:"'Outfit',sans-serif",fontSize:10,color:"#5A4A3A",cursor:"pointer"}}>{zv}</button>
+                        ))}
+                      </div>
+                      <div style={{fontSize:9,color:"#A09080",marginTop:6,lineHeight:1.3}}>© Esri / OpenStreetMap. Trace les bâtiments et chemins par-dessus, puis décoche pour ne garder que ton plan.</div>
+                    </>)}
+                  </div>
+                  <button onClick={loadRealisticBase} style={{width:"100%",padding:"10px 12px",marginBottom:6,border:"1px solid #D4C5B0",borderRadius:9,background:"#F5EDE3",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:12,color:"#5A4A3A",textAlign:"left"}}>
                     Charger base réaliste Grotteaux
+                  </button>
+                  <button onClick={clearVenueZone} style={{width:"100%",padding:"8px 12px",marginBottom:12,border:"1px solid #E8C8B8",borderRadius:9,background:"#FFFCF7",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:11,color:"#8A5A4A",textAlign:"left"}}>
+                    Vider la zone
                   </button>
                   <div style={{fontSize:10,color:"#A09080",marginBottom:6,lineHeight:1.35}}>Référence: parcelles BX0024/25/28/30/0199 (cadastre IGN) + tracés OSM (Cosson, rue des Grotteaux).</div>
                   {VENUE_CATALOG.map(cat=>(<div key={cat.cat}><div style={{fontSize:10,fontWeight:500,textTransform:"uppercase",letterSpacing:1.5,color:"#A09080",margin:"14px 0 8px"}}>{cat.cat}</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:5}}>{cat.items.map(it=>(<button key={it.type} onClick={()=>addVenueEl(it)} style={{padding:"8px 6px",border:"1px solid #E8DDD0",borderRadius:8,background:"#FAF6F0",cursor:"pointer",fontFamily:"'Outfit',sans-serif",fontSize:11,color:"#5A4A3A",display:"flex",alignItems:"center",gap:5,textAlign:"left",lineHeight:1.2}}><span style={{fontSize:16}}>{it.icon}</span><span>{it.label}</span></button>))}</div></div>))}
@@ -4407,6 +4465,14 @@ function App() {
           >
             {/* Transformed layer */}
             <div style={{position:"absolute",left:0,top:0,transform:`translate(${panX}px,${panY}px) scale(${zoom})`,transformOrigin:"0 0",width:4000,height:3000}}>
+
+              {mapLayer.visible&&(
+                <div style={{position:"absolute",left:0,top:0,width:4000,height:3000,opacity:mapLayer.opacity,pointerEvents:"none",zIndex:0}}>
+                  {mapTiles.map(t=>(
+                    <img key={t.k} src={t.u} alt="" crossOrigin="anonymous" draggable={false} style={{position:"absolute",left:t.l,top:t.t,width:t.w+1,height:t.h+1,display:"block",userSelect:"none"}}/>
+                  ))}
+                </div>
+              )}
 
               {curVenue.map(el=>(
                 <VEl key={el.id} el={el} sel={selEl===el.id} canDrag={canEdit&&tab==="plan"} zoom={zoom} panX={panX} panY={panY} containerRef={containerRef}
